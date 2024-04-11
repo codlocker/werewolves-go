@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"werewolves-go/data"
+	"werewolves-go/server/utils"
 	"werewolves-go/types"
 
 	"github.com/anthdm/hollywood/actor"
@@ -28,13 +29,25 @@ func newServer() actor.Receiver {
 	}
 }
 
-func (s *server) Receive(ctx *actor.Context) {
-	fmt.Println(ctx)
+func (s *server) createRole() string {
+	if !utils.DoesWerewolfExist(s.users) {
+		return "werewolf"
+	} else if !utils.DoesWitchExist(s.users) {
+		return "witch"
+	} else {
+		return "townsperson"
+	}
+}
 
+func (s *server) Receive(ctx *actor.Context) {
 	switch msg := ctx.Message().(type) {
 	case *types.Message:
-		s.logger.Info("message received", "msg", msg.Msg, "from", ctx.Sender())
-		s.handleMessage(ctx)
+		if len(msg.Msg) > 0 {
+			s.logger.Info("message received", "msg", msg.Msg, "from", ctx.Sender())
+			s.handleMessage(ctx)
+		} else {
+			slog.Info(fmt.Sprintf("%v message was empty. hence dropped.", ctx.Sender()))
+		}
 	case *types.Disconnect:
 		cAddr := ctx.Sender().GetAddress()
 		pid, ok := s.clients[cAddr]
@@ -61,15 +74,28 @@ func (s *server) Receive(ctx *actor.Context) {
 			return
 		}
 		s.clients[cAddr] = ctx.Sender()
-		s.users[cAddr] = data.Client{Name: msg.Username, Role: createRole()}
+		s.users[cAddr] = data.Client{Name: msg.Username, Role: s.createRole()}
 		slog.Info("new client connected",
 			"id", ctx.Sender().GetID(), "addr", ctx.Sender().GetAddress(), "sender", ctx.Sender(),
 			"username", msg.Username,
 		)
+
+		s.broadcastMessage(ctx, fmt.Sprintf("%v connected", msg.Username))
 	}
 }
 
-// handle the incoming message by broadcasting it to all connected clients.
+func (s *server) broadcastMessage(ctx *actor.Context, message string) {
+	msgResponse := &types.Message{
+		Username: "server/primary",
+		Msg:      message,
+	}
+	for _, pid := range s.clients {
+		if !pid.Equals(ctx.Sender()) {
+			ctx.Send(pid, msgResponse)
+		}
+	}
+}
+
 func (s *server) handleMessage(ctx *actor.Context) {
 	for _, pid := range s.clients {
 		// dont send message to the place where it came from.
@@ -93,7 +119,7 @@ func main() {
 		panic(err)
 	}
 
-	engine.Spawn(nil, "server", actor.WithID("primary"))
+	engine.Spawn(newServer, "server", actor.WithID("primary"))
 
 	select {}
 }
