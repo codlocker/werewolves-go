@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"time"
 	"werewolves-go/data"
 	"werewolves-go/server/utils"
 	"werewolves-go/types"
@@ -15,6 +16,14 @@ import (
 type clientMap map[string]*actor.PID
 type userMap map[string]data.Client
 
+var gameSet bool
+
+var states = [5]string{"connect", "start", "discuss", "vote", "end"}
+var curr_state int = 0
+var min_players_required int = 2
+var state_start_time time.Time = time.Now()
+var connection_duration time.Duration = 60 * time.Second
+
 type server struct {
 	clients clientMap
 	users   userMap
@@ -22,6 +31,8 @@ type server struct {
 }
 
 func newServer() actor.Receiver {
+	gameSet = false
+
 	return &server{
 		clients: make(clientMap),
 		users:   make(userMap),
@@ -40,6 +51,11 @@ func (s *server) createRole() string {
 }
 
 func (s *server) Receive(ctx *actor.Context) {
+	if !gameSet {
+		gameSet = true
+		go s.gameChannel(ctx)
+	}
+
 	switch msg := ctx.Message().(type) {
 	case *types.Message:
 		if len(msg.Msg) > 0 {
@@ -84,15 +100,53 @@ func (s *server) Receive(ctx *actor.Context) {
 	}
 }
 
+func (s *server) gameChannel(ctx *actor.Context) {
+	for {
+		time.Sleep(10 * time.Second)
+		switch states[curr_state] {
+		case "connect":
+			end_time := state_start_time.Add(connection_duration)
+			fmt.Printf("End time for state %v = %v\n", states[curr_state], end_time)
+
+			if len(s.users) >= min_players_required {
+				s.broadcastMessage(ctx, "Minimum players reached. ready to begin!!")
+				curr_state = (curr_state + 1) % len(states)
+			} else {
+				if time.Now().After(end_time) {
+					state_start_time = time.Now()
+					s.broadcastMessage(ctx, "Minimum player not reached. Extending time....")
+				} else {
+					s.broadcastMessage(ctx, "Waiting for players....")
+				}
+			}
+		case "start":
+			s.broadcastMessage(ctx, "Night falls and the town sleeps.  Everyone close your eyes")
+			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
+			pidList := utils.GetWerewolves(s.users, s.clients)
+
+			for _, pid := range pidList {
+				msgResponse := &types.Message{
+					Username: "server/primary",
+					Msg:      "Choose the player to kill",
+				}
+				ctx.Send(pid, msgResponse)
+			}
+
+			for {
+			}
+		default:
+			fmt.Println("State not found")
+		}
+	}
+}
+
 func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 	msgResponse := &types.Message{
 		Username: "server/primary",
 		Msg:      message,
 	}
 	for _, pid := range s.clients {
-		if !pid.Equals(ctx.Sender()) {
-			ctx.Send(pid, msgResponse)
-		}
+		ctx.Send(pid, msgResponse)
 	}
 }
 

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"werewolves-go/data"
+
+	"github.com/anthdm/hollywood/actor"
 )
 
 func DoesWerewolfExist(users map[string]data.Client) bool {
@@ -22,4 +24,16 @@ func DoesWitchExist(users map[string]data.Client) bool {
 	}
 
 	return false
+}
+
+func GetWerewolves(users map[string]data.Client, clients map[string]*actor.PID) []*actor.PID {
+
+	var pidList []*actor.PID
+	for cAddr, data := range users {
+		if data.Role == "werewolf" {
+			pidList = append(pidList, clients[cAddr])
+		}
+	}
+
+	return pidList
 }
