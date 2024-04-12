@@ -6,26 +6,6 @@ import (
 	"github.com/anthdm/hollywood/actor"
 )
 
-func DoesWerewolfExist(users map[string]data.Client) bool {
-	for _, value := range users {
-		if value.Role == "werewolf" {
-			return true
-		}
-	}
-
-	return false
-}
-
-func DoesWitchExist(users map[string]data.Client) bool {
-	for _, value := range users {
-		if value.Role == "witch" {
-			return true
-		}
-	}
-
-	return false
-}
-
 func GetWerewolves(users map[string]data.Client, clients map[string]*actor.PID) []*actor.PID {
 
 	var pidList []*actor.PID
@@ -36,4 +16,23 @@ func GetWerewolves(users map[string]data.Client, clients map[string]*actor.PID) 
 	}
 
 	return pidList
+}
+
+func GetListofUsernames(users map[string]data.Client) []string {
+	var userList []string
+	for _, data := range users {
+		userList = append(userList, data.Name)
+	}
+
+	return userList
+}
+
+func GetCAddrFromUsername(users map[string]data.Client, username string) string {
+	for caddr, user := range users {
+		if user.Name == username {
+			return caddr
+		}
+	}
+
+	return ""
 }
