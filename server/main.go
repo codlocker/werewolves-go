@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"slices"
 	"strings"
 	"time"
 	"werewolves-go/data"
@@ -24,9 +25,11 @@ var states = [5]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "e
 var number_werewolves int = 2
 var number_witches int = 1
 var curr_state int = 0
-var min_players_required int = 4
+var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
+var discussion_duration time.Duration = 60 * time.Second
+var voting_duration time.Duration = 60 * time.Second
 
 type server struct {
 	clients    clientMap
@@ -55,8 +58,11 @@ func (s *server) setUpRoles() {
 	// Set up werewolf
 	for i := 0; i < number_werewolves; i++ {
 		var isSet bool = false
+		var countLimit int = 0
 		for {
-			if isSet {
+			countLimit++
+
+			if isSet || countLimit > 1000 {
 				break
 			}
 			randomIndex := rand.Intn(len(user_names))
@@ -71,14 +77,18 @@ func (s *server) setUpRoles() {
 			} else {
 				continue
 			}
+
+			countLimit++
 		}
 	}
 
 	// Set up witch
 	for i := 0; i < number_witches; i++ {
 		var isSet bool = false
+		var countLimit int = 0
 		for {
-			if isSet {
+			countLimit++
+			if isSet || countLimit > 1000 {
 				break
 			}
 			randomIndex := rand.Intn(len(user_names))
@@ -154,7 +164,7 @@ func (s *server) Receive(ctx *actor.Context) {
 			return
 		}
 		s.clients[cAddr] = ctx.Sender()
-		s.users[cAddr] = data.Client{Name: msg.Username, Role: ""}
+		s.users[cAddr] = *data.NewClient(msg.Username, "")
 		slog.Info("new client connected",
 			"id", ctx.Sender().GetID(), "addr", ctx.Sender().GetAddress(), "sender", ctx.Sender(),
 			"username", msg.Username,
@@ -186,23 +196,42 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 		case "start":
-			// Message werewolves
+			// Message everyone
 			s.broadcastMessage(ctx, "Night falls and the town sleeps.  Everyone close your eyes")
 			curr_state = (curr_state + 1) % len(states)
 		case "werewolfdiscuss":
+			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", discussion_duration))
 			pidList := utils.GetWerewolves(s.users, s.clients)
 
 			for _, pid := range pidList {
-				msgResponse := &types.Message{
-					Username: "server/primary",
-					Msg:      "Choose the player to kill: " + strings.Join(utils.GetListofUsernames(s.users), ","),
-				}
+				msgResponse := utils.FormatMessageResponseFromServer(
+					"Choose the player to kill: " + strings.Join(utils.GetListofUsernames(s.users), ","))
 				ctx.Send(pid, msgResponse)
 			}
 
+			state_end_time := time.Now().Add(discussion_duration)
 			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
 			}
+
+			curr_state = (curr_state + 1) % len(states)
+		case "werewolfvote":
+			s.broadcastMessage(ctx, "Werewolves, now its time to vote")
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", voting_duration))
+
+			state_end_time := time.Now().Add(voting_duration)
+
+			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
+			}
+
+			curr_state = (curr_state + 1) % len(states)
 		default:
 			fmt.Println("State not found")
 		}
@@ -210,10 +239,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 }
 
 func (s *server) broadcastMessage(ctx *actor.Context, message string) {
-	msgResponse := &types.Message{
-		Username: "server/primary",
-		Msg:      message,
-	}
+	msgResponse := utils.FormatMessageResponseFromServer(message)
 	for _, pid := range s.clients {
 		ctx.Send(pid, msgResponse)
 	}
@@ -222,10 +248,33 @@ func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 func (s *server) handleMessage(ctx *actor.Context) {
 	var allowedUsers map[string]data.Client
 
+	// Check for whether the person is dead or alive
+	if !s.users[ctx.Sender().GetAddress()].Status {
+		ctx.Send(ctx.PID(), "Bruh, you cant message when you are dead!")
+	}
+
+	// Do not accept messages if the game has ended
+	if curr_state == 4 {
+		ctx.Send(ctx.PID(), "The game has ended. Thank you for playing!")
+	}
+
+	// Check for discussion state of werewolves or witch or townsperson
 	if curr_state == 2 || curr_state == 3 {
 		allowedUsers = s.werewolves
 	} else {
 		allowedUsers = s.users
+	}
+
+	// Evaluate messages for voting
+	if curr_state == 3 {
+		user_names := utils.GetListofUsernames(s.users)
+		msg := "na"
+		fmt.Println(user_names)
+		fmt.Println(ctx.Message())
+
+		if !slices.Contains(user_names, msg) {
+			ctx.Send(ctx.PID(), "")
+		}
 	}
 
 	for caddr, _ := range allowedUsers {

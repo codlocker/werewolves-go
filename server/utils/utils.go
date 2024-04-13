@@ -2,6 +2,7 @@ package utils
 
 import (
 	"werewolves-go/data"
+	"werewolves-go/types"
 
 	"github.com/anthdm/hollywood/actor"
 )
@@ -35,4 +36,13 @@ func GetCAddrFromUsername(users map[string]data.Client, username string) string 
 	}
 
 	return ""
+}
+
+func FormatMessageResponseFromServer(message string) *types.Message {
+	msgResponse := &types.Message{
+		Username: "server/primary",
+		Msg:      message,
+	}
+
+	return msgResponse
 }
