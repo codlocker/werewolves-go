@@ -21,7 +21,7 @@ type userMap map[string]data.Client
 
 var gameSet bool
 
-var states = [5]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "end"}
+var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 2
 var number_witches int = 1
 var curr_state int = 0
@@ -32,16 +32,16 @@ var discussion_duration time.Duration = 60 * time.Second
 var voting_duration time.Duration = 60 * time.Second
 
 type server struct {
-	clients    clientMap
-	users      userMap
-	werewolves userMap
-	witches    userMap
-	logger     *slog.Logger
+	clients         clientMap
+	users           userMap
+	werewolves      userMap
+	werewolvesVotes *data.Voters
+	witches         userMap
+	logger          *slog.Logger
 }
 
 func newServer() actor.Receiver {
 	gameSet = false
-
 	return &server{
 		clients:    make(clientMap),
 		users:      make(userMap),
@@ -220,8 +220,11 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 			curr_state = (curr_state + 1) % len(states)
 		case "werewolfvote":
+			s.werewolvesVotes = data.NewVoters(
+				utils.GetListofUsernames(s.users))
+
 			s.broadcastMessage(ctx, "Werewolves, now its time to vote")
-			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", voting_duration))
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote", voting_duration))
 
 			state_end_time := time.Now().Add(voting_duration)
 
@@ -230,8 +233,19 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					break
 				}
 			}
-
 			curr_state = (curr_state + 1) % len(states)
+		case "townpersondiscussion":
+			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
+
+			if max_voted_guy == "" {
+				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonigh")
+			} else {
+				s.broadcastMessage(ctx, fmt.Sprintf("Townspeople, the werewolf chose to kill %v", max_voted_guy))
+			}
+
+			for {
+			}
+		case "townspersonvoting":
 		default:
 			fmt.Println("State not found")
 		}
@@ -268,22 +282,29 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	// Evaluate messages for voting
 	if curr_state == 3 {
 		user_names := utils.GetListofUsernames(s.users)
-		msg := "na"
 		fmt.Println(user_names)
-		fmt.Println(ctx.Message())
+		msg := ctx.Message().(*types.Message).Msg
 
 		if !slices.Contains(user_names, msg) {
-			ctx.Send(ctx.PID(), "")
+			ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+				"Please select the elements from the list only.."))
+		} else {
+			fmt.Printf("%v has chosen to kill %v",
+				s.users[ctx.Sender().GetAddress()].Name,
+				msg)
+			s.werewolvesVotes.AddVote(msg)
 		}
 	}
 
-	for caddr, _ := range allowedUsers {
-		// dont send message to the place where it came from.
-		pid := s.clients[caddr]
+	if curr_state != 3 {
+		for caddr, _ := range allowedUsers {
+			// dont send message to the place where it came from.
+			pid := s.clients[caddr]
 
-		if !pid.Equals(ctx.Sender()) {
-			s.logger.Info("forwarding message", "pid", pid.ID, "addr", pid.Address, "msg", ctx.Message())
-			ctx.Forward(pid)
+			if !pid.Equals(ctx.Sender()) {
+				s.logger.Info("forwarding message", "pid", pid.ID, "addr", pid.Address, "msg", ctx.Message())
+				ctx.Forward(pid)
+			}
 		}
 	}
 }
