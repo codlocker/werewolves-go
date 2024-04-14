@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"slices"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ import (
 )
 
 type clientMap map[string]*actor.PID
-type userMap map[string]data.Client
+type userMap map[string]*data.Client
 
 var gameSet bool
 
@@ -51,70 +50,6 @@ func newServer() actor.Receiver {
 	}
 }
 
-func (s *server) setUpRoles() {
-
-	user_names := utils.GetListofUsernames(s.users)
-
-	// Set up werewolf
-	for i := 0; i < number_werewolves; i++ {
-		var isSet bool = false
-		var countLimit int = 0
-		for {
-			countLimit++
-
-			if isSet || countLimit > 1000 {
-				break
-			}
-			randomIndex := rand.Intn(len(user_names))
-			caddr := utils.GetCAddrFromUsername(s.users, user_names[randomIndex])
-			if s.users[caddr].Role == "" {
-				if entry, ok := s.users[caddr]; ok {
-					entry.Role = "werewolf"
-					s.users[caddr] = entry
-					isSet = true
-					s.werewolves[caddr] = entry
-				}
-			} else {
-				continue
-			}
-
-			countLimit++
-		}
-	}
-
-	// Set up witch
-	for i := 0; i < number_witches; i++ {
-		var isSet bool = false
-		var countLimit int = 0
-		for {
-			countLimit++
-			if isSet || countLimit > 1000 {
-				break
-			}
-			randomIndex := rand.Intn(len(user_names))
-			caddr := utils.GetCAddrFromUsername(s.users, user_names[randomIndex])
-			if s.users[caddr].Role == "" {
-				if entry, ok := s.users[caddr]; ok {
-					entry.Role = "witch"
-					s.users[caddr] = entry
-					isSet = true
-					s.witches[caddr] = entry
-				}
-			} else {
-				continue
-			}
-		}
-	}
-
-	// Set up townsperson
-	for caddr, user := range s.users {
-		if user.Role == "" {
-			user.Role = "townsperson"
-			s.users[caddr] = user
-		}
-	}
-}
-
 func (s *server) Receive(ctx *actor.Context) {
 	if !gameSet {
 		gameSet = true
@@ -127,7 +62,7 @@ func (s *server) Receive(ctx *actor.Context) {
 			s.logger.Info("message received", "msg", msg.Msg, "from", ctx.Sender())
 			s.handleMessage(ctx)
 		} else {
-			slog.Info(fmt.Sprintf("%v message was empty. hence dropped.", ctx.Sender()))
+			s.logger.Info(fmt.Sprintf("%v message was empty. hence dropped.", ctx.Sender()))
 		}
 	case *types.Disconnect:
 		cAddr := ctx.Sender().GetAddress()
@@ -164,8 +99,8 @@ func (s *server) Receive(ctx *actor.Context) {
 			return
 		}
 		s.clients[cAddr] = ctx.Sender()
-		s.users[cAddr] = *data.NewClient(msg.Username, "")
-		slog.Info("new client connected",
+		s.users[cAddr] = data.NewClient(msg.Username, "")
+		s.logger.Info("new client connected",
 			"id", ctx.Sender().GetID(), "addr", ctx.Sender().GetAddress(), "sender", ctx.Sender(),
 			"username", msg.Username,
 		)
@@ -191,7 +126,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					}
 				}
 
-				s.setUpRoles()
+				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
 				fmt.Println(s.users)
 				curr_state = (curr_state + 1) % len(states)
 			} else {
@@ -274,7 +209,7 @@ func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 }
 
 func (s *server) handleMessage(ctx *actor.Context) {
-	var allowedUsers map[string]data.Client
+	var allowedUsers map[string]*data.Client
 	var username string = ctx.Message().(*types.Message).Username
 
 	// Check for whether the person is dead or alive
@@ -285,7 +220,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	}
 
 	// Do not accept messages if the game has ended
-	if curr_state == 4 {
+	if curr_state == len(states)-1 {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
