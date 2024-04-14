@@ -201,7 +201,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			}
 		case "townpersonvoting":
 			s.broadcastMessage(ctx, "Townpeople, now its time for you to vote")
-			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote"))
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote", voting_duration))
 			state_end_time := time.Now().Add(voting_duration)
 			for {
 				if time.Now().After(state_end_time) {
