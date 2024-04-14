@@ -46,3 +46,13 @@ func FormatMessageResponseFromServer(message string) *types.Message {
 
 	return msgResponse
 }
+
+func IsUsernameAllowed(username string, users map[string]data.Client) bool {
+	for _, user := range users {
+		if user.Name == username {
+			return true
+		}
+	}
+
+	return false
+}

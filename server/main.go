@@ -183,7 +183,14 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			fmt.Printf("End time for state %v = %v\n", states[curr_state], end_time)
 
 			if len(s.users) >= min_players_required {
-				s.broadcastMessage(ctx, "Minimum players reached. ready to begin!!")
+				s.broadcastMessage(ctx, "Minimum players reached. Ready to begin in 60 seconds!!")
+				end_time := state_start_time.Add(connection_duration)
+				for {
+					if time.Now().After(end_time) {
+						break
+					}
+				}
+
 				s.setUpRoles()
 				fmt.Println(s.users)
 				curr_state = (curr_state + 1) % len(states)
@@ -233,19 +240,26 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					break
 				}
 			}
+
 			curr_state = (curr_state + 1) % len(states)
 		case "townpersondiscussion":
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
 
 			if max_voted_guy == "" {
-				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonigh")
+				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
 			} else {
+				dead_user_address := utils.GetCAddrFromUsername(s.users, max_voted_guy)
+				if entry, ok := s.users[dead_user_address]; ok {
+					entry.Status = false
+					s.users[dead_user_address] = entry
+				}
+
 				s.broadcastMessage(ctx, fmt.Sprintf("Townspeople, the werewolf chose to kill %v", max_voted_guy))
 			}
 
 			for {
 			}
-		case "townspersonvoting":
+		case "townpersonvoting":
 		default:
 			fmt.Println("State not found")
 		}
@@ -261,15 +275,20 @@ func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 
 func (s *server) handleMessage(ctx *actor.Context) {
 	var allowedUsers map[string]data.Client
+	var username string = ctx.Message().(*types.Message).Username
 
 	// Check for whether the person is dead or alive
 	if !s.users[ctx.Sender().GetAddress()].Status {
-		ctx.Send(ctx.PID(), "Bruh, you cant message when you are dead!")
+		ctx.Send(
+			ctx.Sender(),
+			utils.FormatMessageResponseFromServer("Bruh, you cant message when you are dead!"))
 	}
 
 	// Do not accept messages if the game has ended
 	if curr_state == 4 {
-		ctx.Send(ctx.PID(), "The game has ended. Thank you for playing!")
+		ctx.Send(
+			ctx.Sender(),
+			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
 	}
 
 	// Check for discussion state of werewolves or witch or townsperson
@@ -279,33 +298,39 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		allowedUsers = s.users
 	}
 
-	// Evaluate messages for voting
-	if curr_state == 3 {
-		user_names := utils.GetListofUsernames(s.users)
-		fmt.Println(user_names)
-		msg := ctx.Message().(*types.Message).Msg
+	// Only allow messages to be processed if they are in the allowed list
+	if utils.IsUsernameAllowed(username, allowedUsers) {
+		// Evaluate messages for voting
+		if curr_state == 3 {
+			user_names := utils.GetListofUsernames(s.users)
+			fmt.Println(user_names)
+			msg := ctx.Message().(*types.Message).Msg
 
-		if !slices.Contains(user_names, msg) {
-			ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
-				"Please select the elements from the list only.."))
-		} else {
-			fmt.Printf("%v has chosen to kill %v",
-				s.users[ctx.Sender().GetAddress()].Name,
-				msg)
-			s.werewolvesVotes.AddVote(msg)
-		}
-	}
-
-	if curr_state != 3 {
-		for caddr, _ := range allowedUsers {
-			// dont send message to the place where it came from.
-			pid := s.clients[caddr]
-
-			if !pid.Equals(ctx.Sender()) {
-				s.logger.Info("forwarding message", "pid", pid.ID, "addr", pid.Address, "msg", ctx.Message())
-				ctx.Forward(pid)
+			if !slices.Contains(user_names, msg) {
+				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+					"Please select the elements from the list only.."))
+			} else {
+				fmt.Printf("%v has chosen to kill %v",
+					s.users[ctx.Sender().GetAddress()].Name,
+					msg)
+				s.werewolvesVotes.AddVote(msg)
 			}
 		}
+
+		if curr_state != 3 {
+			for caddr, _ := range allowedUsers {
+				// dont send message to the place where it came from.
+				pid := s.clients[caddr]
+
+				if !pid.Equals(ctx.Sender()) {
+					s.logger.Info("forwarding message", "pid", pid.ID, "addr", pid.Address, "msg", ctx.Message())
+					ctx.Forward(pid)
+				}
+			}
+		}
+	} else {
+		ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+			fmt.Sprintf("You are not allowed to send messages in %v", states[curr_state])))
 	}
 }
 
