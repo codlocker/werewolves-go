@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"slices"
 	"strings"
 	"time"
@@ -17,18 +16,18 @@ import (
 )
 
 type clientMap map[string]*actor.PID
-type userMap map[string]data.Client
+type userMap map[string]*data.Client
 
 var gameSet bool
 
 var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 2
-var number_witches int = 1
 var curr_state int = 0
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
-var discussion_duration time.Duration = 60 * time.Second
+var werewolf_discussion_duration time.Duration = 60 * time.Second
+var townsperson_discussion_duration time.Duration = 120 * time.Second
 var voting_duration time.Duration = 60 * time.Second
 
 type server struct {
@@ -51,70 +50,6 @@ func newServer() actor.Receiver {
 	}
 }
 
-func (s *server) setUpRoles() {
-
-	user_names := utils.GetListofUsernames(s.users)
-
-	// Set up werewolf
-	for i := 0; i < number_werewolves; i++ {
-		var isSet bool = false
-		var countLimit int = 0
-		for {
-			countLimit++
-
-			if isSet || countLimit > 1000 {
-				break
-			}
-			randomIndex := rand.Intn(len(user_names))
-			caddr := utils.GetCAddrFromUsername(s.users, user_names[randomIndex])
-			if s.users[caddr].Role == "" {
-				if entry, ok := s.users[caddr]; ok {
-					entry.Role = "werewolf"
-					s.users[caddr] = entry
-					isSet = true
-					s.werewolves[caddr] = entry
-				}
-			} else {
-				continue
-			}
-
-			countLimit++
-		}
-	}
-
-	// Set up witch
-	for i := 0; i < number_witches; i++ {
-		var isSet bool = false
-		var countLimit int = 0
-		for {
-			countLimit++
-			if isSet || countLimit > 1000 {
-				break
-			}
-			randomIndex := rand.Intn(len(user_names))
-			caddr := utils.GetCAddrFromUsername(s.users, user_names[randomIndex])
-			if s.users[caddr].Role == "" {
-				if entry, ok := s.users[caddr]; ok {
-					entry.Role = "witch"
-					s.users[caddr] = entry
-					isSet = true
-					s.witches[caddr] = entry
-				}
-			} else {
-				continue
-			}
-		}
-	}
-
-	// Set up townsperson
-	for caddr, user := range s.users {
-		if user.Role == "" {
-			user.Role = "townsperson"
-			s.users[caddr] = user
-		}
-	}
-}
-
 func (s *server) Receive(ctx *actor.Context) {
 	if !gameSet {
 		gameSet = true
@@ -127,7 +62,7 @@ func (s *server) Receive(ctx *actor.Context) {
 			s.logger.Info("message received", "msg", msg.Msg, "from", ctx.Sender())
 			s.handleMessage(ctx)
 		} else {
-			slog.Info(fmt.Sprintf("%v message was empty. hence dropped.", ctx.Sender()))
+			s.logger.Info(fmt.Sprintf("%v message was empty. hence dropped.", ctx.Sender()))
 		}
 	case *types.Disconnect:
 		cAddr := ctx.Sender().GetAddress()
@@ -164,8 +99,8 @@ func (s *server) Receive(ctx *actor.Context) {
 			return
 		}
 		s.clients[cAddr] = ctx.Sender()
-		s.users[cAddr] = *data.NewClient(msg.Username, "")
-		slog.Info("new client connected",
+		s.users[cAddr] = data.NewClient(msg.Username, "")
+		s.logger.Info("new client connected",
 			"id", ctx.Sender().GetID(), "addr", ctx.Sender().GetAddress(), "sender", ctx.Sender(),
 			"username", msg.Username,
 		)
@@ -191,7 +126,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					}
 				}
 
-				s.setUpRoles()
+				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
 				fmt.Println(s.users)
 				curr_state = (curr_state + 1) % len(states)
 			} else {
@@ -209,7 +144,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 		case "werewolfdiscuss":
 			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
-			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", discussion_duration))
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
 			pidList := utils.GetWerewolves(s.users, s.clients)
 
 			for _, pid := range pidList {
@@ -218,7 +153,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				ctx.Send(pid, msgResponse)
 			}
 
-			state_end_time := time.Now().Add(discussion_duration)
+			state_end_time := time.Now().Add(werewolf_discussion_duration)
 			for {
 				if time.Now().After(state_end_time) {
 					break
@@ -244,7 +179,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			curr_state = (curr_state + 1) % len(states)
 		case "townpersondiscussion":
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
-
+			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
 			if max_voted_guy == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
 			} else {
@@ -254,12 +189,35 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					s.users[dead_user_address] = entry
 				}
 
-				s.broadcastMessage(ctx, fmt.Sprintf("Townspeople, the werewolf chose to kill %v", max_voted_guy))
+				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", townsperson_discussion_duration))
+			state_end_time := time.Now().Add(townsperson_discussion_duration)
 			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
 			}
 		case "townpersonvoting":
+			s.broadcastMessage(ctx, "Townpeople, now its time for you to vote")
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote"))
+			state_end_time := time.Now().Add(voting_duration)
+			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
+			}
+		case "end":
+			// Game win scenario. If no werewolf or townperson choose to move the last state else
+			if !utils.AreTownspersonAlive(s.users) {
+				s.broadcastMessage(ctx, "Werewolves win")
+			} else if !utils.AreWerewolvesAlive(s.users) {
+				s.broadcastMessage(ctx, "Townsperson win")
+			} else {
+				curr_state = 2
+			}
+
 		default:
 			fmt.Println("State not found")
 		}
@@ -274,7 +232,7 @@ func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 }
 
 func (s *server) handleMessage(ctx *actor.Context) {
-	var allowedUsers map[string]data.Client
+	var allowedUsers map[string]*data.Client
 	var username string = ctx.Message().(*types.Message).Username
 
 	// Check for whether the person is dead or alive
@@ -285,7 +243,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	}
 
 	// Do not accept messages if the game has ended
-	if curr_state == 4 {
+	if curr_state == len(states)-1 {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
