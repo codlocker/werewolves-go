@@ -8,6 +8,26 @@ import (
 	"github.com/anthdm/hollywood/actor"
 )
 
+func AreWerewolvesAlive(users map[string]*data.Client) bool {
+	for _, user := range users {
+		if user.Status && user.Role == "werewolf" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func AreTownspersonAlive(users map[string]*data.Client) bool {
+	for _, user := range users {
+		if user.Status && user.Role == "townsperson" {
+			return true
+		}
+	}
+
+	return false
+}
+
 func GetWerewolves(users map[string]*data.Client, clients map[string]*actor.PID) []*actor.PID {
 
 	var pidList []*actor.PID

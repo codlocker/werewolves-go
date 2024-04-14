@@ -22,12 +22,12 @@ var gameSet bool
 
 var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 2
-var number_witches int = 1
 var curr_state int = 0
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
-var discussion_duration time.Duration = 60 * time.Second
+var werewolf_discussion_duration time.Duration = 60 * time.Second
+var townsperson_discussion_duration time.Duration = 120 * time.Second
 var voting_duration time.Duration = 60 * time.Second
 
 type server struct {
@@ -144,7 +144,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 		case "werewolfdiscuss":
 			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
-			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", discussion_duration))
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
 			pidList := utils.GetWerewolves(s.users, s.clients)
 
 			for _, pid := range pidList {
@@ -153,7 +153,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				ctx.Send(pid, msgResponse)
 			}
 
-			state_end_time := time.Now().Add(discussion_duration)
+			state_end_time := time.Now().Add(werewolf_discussion_duration)
 			for {
 				if time.Now().After(state_end_time) {
 					break
@@ -179,7 +179,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			curr_state = (curr_state + 1) % len(states)
 		case "townpersondiscussion":
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
-
+			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
 			if max_voted_guy == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
 			} else {
@@ -189,12 +189,35 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					s.users[dead_user_address] = entry
 				}
 
-				s.broadcastMessage(ctx, fmt.Sprintf("Townspeople, the werewolf chose to kill %v", max_voted_guy))
+				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", townsperson_discussion_duration))
+			state_end_time := time.Now().Add(townsperson_discussion_duration)
 			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
 			}
 		case "townpersonvoting":
+			s.broadcastMessage(ctx, "Townpeople, now its time for you to vote")
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote"))
+			state_end_time := time.Now().Add(voting_duration)
+			for {
+				if time.Now().After(state_end_time) {
+					break
+				}
+			}
+		case "end":
+			// Game win scenario. If no werewolf or townperson choose to move the last state else
+			if !utils.AreTownspersonAlive(s.users) {
+				s.broadcastMessage(ctx, "Werewolves win")
+			} else if !utils.AreWerewolvesAlive(s.users) {
+				s.broadcastMessage(ctx, "Townsperson win")
+			} else {
+				curr_state = 2
+			}
+
 		default:
 			fmt.Println("State not found")
 		}
