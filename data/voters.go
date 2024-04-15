@@ -51,3 +51,9 @@ func (voters *Voters) AddVote(user string) bool {
 		return false
 	}
 }
+
+func (voter *Voters) ClearVotes() {
+	for user, _ := range voter.user_vote {
+		voter.user_vote[user] = 0
+	}
+}

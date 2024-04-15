@@ -35,6 +35,7 @@ type server struct {
 	users           userMap
 	werewolves      userMap
 	werewolvesVotes *data.Voters
+	userVotes       *data.Voters
 	witches         userMap
 	logger          *slog.Logger
 }
@@ -47,6 +48,20 @@ func newServer() actor.Receiver {
 		werewolves: make(userMap),
 		witches:    make(userMap),
 		logger:     slog.Default(),
+	}
+}
+
+func (s *server) markGuyAsDead(max_voted_guy string) {
+
+	dead_user_address := utils.GetCAddrFromUsername(s.users, max_voted_guy)
+	if entry, ok := s.users[dead_user_address]; ok {
+		entry.Status = false
+		s.users[dead_user_address] = entry
+	}
+
+	if entry, ok := s.werewolves[dead_user_address]; ok {
+		entry.Status = false
+		s.werewolves[dead_user_address] = entry
 	}
 }
 
@@ -145,7 +160,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
-			pidList := utils.GetWerewolves(s.users, s.clients)
+			pidList := utils.GetAliveWerewolves(s.users, s.clients)
 
 			for _, pid := range pidList {
 				msgResponse := utils.FormatMessageResponseFromServer(
@@ -183,15 +198,11 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			if max_voted_guy == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
 			} else {
-				dead_user_address := utils.GetCAddrFromUsername(s.users, max_voted_guy)
-				if entry, ok := s.users[dead_user_address]; ok {
-					entry.Status = false
-					s.users[dead_user_address] = entry
-				}
-
+				s.markGuyAsDead(max_voted_guy)
 				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			s.werewolvesVotes.ClearVotes()
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", townsperson_discussion_duration))
 			state_end_time := time.Now().Add(townsperson_discussion_duration)
 			for {
@@ -199,20 +210,45 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					break
 				}
 			}
-		case "townpersonvoting":
+
+			curr_state = (curr_state + 1) % len(states)
+		case "townspersonvote":
+			// Initialize user voter instance.
+			s.userVotes = data.NewVoters(utils.GetListofUsernames(s.users))
+
 			s.broadcastMessage(ctx, "Townpeople, now its time for you to vote")
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to vote", voting_duration))
+
+			pidList := utils.GetAliveTownperson(s.users, s.clients)
+
+			for _, pid := range pidList {
+				msgResponse := utils.FormatMessageResponseFromServer(
+					"Choose the player to kick out: " + strings.Join(utils.GetListofUsernames(s.users), ","))
+				ctx.Send(pid, msgResponse)
+			}
+
 			state_end_time := time.Now().Add(voting_duration)
 			for {
 				if time.Now().After(state_end_time) {
 					break
 				}
 			}
+
+			curr_state = (curr_state + 1) % len(states)
 		case "end":
+			max_voted_guy := s.userVotes.GetMaxVotedUser()
+
+			if max_voted_guy == "" {
+				s.broadcastMessage(ctx, "The town could not reach a consensus. No one was kicked")
+			} else {
+				s.markGuyAsDead(max_voted_guy)
+				s.broadcastMessage(ctx, fmt.Sprintf("The town has chosen to kill %v", max_voted_guy))
+			}
+
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
-			if !utils.AreTownspersonAlive(s.users) {
+			if !utils.AreTownspersonAlive(s.users) && utils.AreWerewolvesAlive(s.users) {
 				s.broadcastMessage(ctx, "Werewolves win")
-			} else if !utils.AreWerewolvesAlive(s.users) {
+			} else if !utils.AreWerewolvesAlive(s.users) && utils.AreTownspersonAlive(s.users) {
 				s.broadcastMessage(ctx, "Townsperson win")
 			} else {
 				curr_state = 2
@@ -240,6 +276,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("Bruh, you cant message when you are dead!"))
+		return
 	}
 
 	// Do not accept messages if the game has ended
@@ -247,6 +284,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
+		return
 	}
 
 	// Check for discussion state of werewolves or witch or townsperson
@@ -259,7 +297,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	// Only allow messages to be processed if they are in the allowed list
 	if utils.IsUsernameAllowed(username, allowedUsers) {
 		// Evaluate messages for voting
-		if curr_state == 3 {
+		if curr_state == 3 || curr_state == 5 {
 			user_names := utils.GetListofUsernames(s.users)
 			fmt.Println(user_names)
 			msg := ctx.Message().(*types.Message).Msg
@@ -271,11 +309,15 @@ func (s *server) handleMessage(ctx *actor.Context) {
 				fmt.Printf("%v has chosen to kill %v",
 					s.users[ctx.Sender().GetAddress()].Name,
 					msg)
-				s.werewolvesVotes.AddVote(msg)
+				if curr_state == 3 {
+					s.werewolvesVotes.AddVote(msg)
+				} else if curr_state == 5 {
+					s.userVotes.AddVote(msg)
+				}
 			}
 		}
 
-		if curr_state != 3 {
+		if curr_state != 3 && curr_state != 5 {
 			for caddr, _ := range allowedUsers {
 				// dont send message to the place where it came from.
 				pid := s.clients[caddr]
