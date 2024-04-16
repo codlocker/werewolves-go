@@ -142,7 +142,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 
 				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
-				fmt.Println(s.users)
+				utils.PrintUsers(s.users)
 				curr_state = (curr_state + 1) % len(states)
 			} else {
 				if time.Now().After(end_time) {
@@ -202,6 +202,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", townsperson_discussion_duration))
 			state_end_time := time.Now().Add(townsperson_discussion_duration)
@@ -245,6 +246,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.broadcastMessage(ctx, fmt.Sprintf("The town has chosen to kill %v", max_voted_guy))
 			}
 
+			s.userVotes.PrintVotes()
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
 			if !utils.AreTownspersonAlive(s.users) && utils.AreWerewolvesAlive(s.users) {
 				s.broadcastMessage(ctx, "Werewolves win")
@@ -311,9 +313,9 @@ func (s *server) handleMessage(ctx *actor.Context) {
 					s.users[ctx.Sender().GetAddress()].Name,
 					msg)
 				if curr_state == 3 {
-					s.werewolvesVotes.AddVote(msg)
+					s.werewolvesVotes.AddVote(msg, s.users[ctx.Sender().GetAddress()].Name)
 				} else if curr_state == 5 {
-					s.userVotes.AddVote(msg)
+					s.userVotes.AddVote(msg, s.users[ctx.Sender().GetAddress()].Name)
 				}
 			}
 		}

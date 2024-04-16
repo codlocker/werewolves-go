@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"math/rand"
+	"fmt"
 	"werewolves-go/data"
 	"werewolves-go/types"
 
@@ -98,28 +98,13 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 
 	// Set up werewolf
 	for i := 0; i < number_of_werewolves; i++ {
-		var isSet bool = false
-		var countLimit int = 0
-		for {
-			countLimit++
-
-			if isSet || countLimit > 1000 {
-				break
+		caddr := GetCAddrFromUsername(users, user_names[i])
+		if users[caddr].Role == "" {
+			if entry, ok := users[caddr]; ok {
+				entry.Role = "werewolf"
+				users[caddr] = entry
+				werewolves[caddr] = entry
 			}
-			randomIndex := rand.Intn(len(user_names))
-			caddr := GetCAddrFromUsername(users, user_names[randomIndex])
-			if users[caddr].Role == "" {
-				if entry, ok := users[caddr]; ok {
-					entry.Role = "werewolf"
-					users[caddr] = entry
-					isSet = true
-					werewolves[caddr] = entry
-				}
-			} else {
-				continue
-			}
-
-			countLimit++
 		}
 	}
 
@@ -129,5 +114,17 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 			user.Role = "townsperson"
 			users[caddr] = user
 		}
+	}
+}
+
+func PrintUsers(users map[string]*data.Client) {
+	fmt.Println("Print Users")
+	for user, data := range users {
+		fmt.Printf(
+			"%v has been assigned %v username, has role %v with alive status %v\n",
+			user,
+			data.Name,
+			data.Role,
+			data.Status)
 	}
 }

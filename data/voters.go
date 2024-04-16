@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"math"
 )
 
@@ -44,11 +45,11 @@ func (voters *Voters) GetMaxVotedUser() string {
 	}
 }
 
-func (voters *Voters) AddVote(user string) bool {
+func (voters *Voters) AddVote(user string, sender string) bool {
 	_, ok := voters.user_vote[user]
-	if ok && !voters.voted_users[user] {
+	if ok && !voters.voted_users[sender] {
 		voters.user_vote[user]++
-		voters.voted_users[user] = true
+		voters.voted_users[sender] = true
 		return true
 	} else {
 		return false
@@ -61,4 +62,11 @@ func (voter *Voters) ClearVotes() {
 	}
 
 	voter.voted_users = nil
+}
+
+func (voter *Voters) PrintVotes() {
+	fmt.Println("VOTES")
+	for user, vote := range voter.user_vote {
+		fmt.Printf("%v has %v votes\n", user, vote)
+	}
 }
