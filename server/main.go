@@ -21,7 +21,7 @@ type userMap map[string]*data.Client
 var gameSet bool
 
 var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
-var number_werewolves int = 2
+var number_werewolves int = 1
 var curr_state int = 0
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
@@ -254,6 +254,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				curr_state = 2
 			}
 
+			s.userVotes.ClearVotes()
 		default:
 			fmt.Println("State not found")
 		}
@@ -318,7 +319,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		}
 
 		if curr_state != 3 && curr_state != 5 {
-			for caddr, _ := range allowedUsers {
+			for caddr := range allowedUsers {
 				// dont send message to the place where it came from.
 				pid := s.clients[caddr]
 

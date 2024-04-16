@@ -5,12 +5,14 @@ import (
 )
 
 type Voters struct {
-	user_vote map[string]int
+	user_vote   map[string]int
+	voted_users map[string]bool
 }
 
 func NewVoters(users []string) *Voters {
 	v := &Voters{
-		user_vote: make(map[string]int),
+		user_vote:   make(map[string]int),
+		voted_users: make(map[string]bool),
 	}
 
 	for _, user := range users {
@@ -44,8 +46,9 @@ func (voters *Voters) GetMaxVotedUser() string {
 
 func (voters *Voters) AddVote(user string) bool {
 	_, ok := voters.user_vote[user]
-	if ok {
+	if ok && !voters.voted_users[user] {
 		voters.user_vote[user]++
+		voters.voted_users[user] = true
 		return true
 	} else {
 		return false
@@ -53,7 +56,9 @@ func (voters *Voters) AddVote(user string) bool {
 }
 
 func (voter *Voters) ClearVotes() {
-	for user, _ := range voter.user_vote {
+	for user := range voter.user_vote {
 		voter.user_vote[user] = 0
 	}
+
+	voter.voted_users = nil
 }
