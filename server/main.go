@@ -109,10 +109,12 @@ func (s *server) Receive(ctx *actor.Context) {
 			s.logger.Warn("client already connected", "client", ctx.Sender().GetID())
 			return
 		}
+
 		if _, ok := s.users[cAddr]; ok {
 			s.logger.Warn("user already connected", "client", ctx.Sender().GetID())
 			return
 		}
+
 		s.clients[cAddr] = ctx.Sender()
 		s.users[cAddr] = data.NewClient(msg.Username, "")
 		s.logger.Info("new client connected",
@@ -143,6 +145,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
 				utils.PrintUsers(s.users)
+				utils.SendIdentities(s.users, s.clients, ctx)
 				curr_state = (curr_state + 1) % len(states)
 			} else {
 				if time.Now().After(end_time) {
