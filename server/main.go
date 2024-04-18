@@ -4,8 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"slices"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 	"werewolves-go/data"
 	"werewolves-go/server/utils"
@@ -72,6 +76,12 @@ func (s *server) Receive(ctx *actor.Context) {
 	}
 
 	switch msg := ctx.Message().(type) {
+	case actor.Stopped:
+		s.logger.Info("Moderator has chosen to die.")
+		for _, pid := range s.clients {
+			ctx.Send(pid, utils.FormatMessageResponseFromServer(
+				"Moderator has chosen to die. You are safe to leave."))
+		}
 	case *types.Message:
 		if len(msg.Msg) > 0 {
 			s.logger.Info("message received", "msg", msg.Msg, "from", ctx.Sender())
@@ -252,9 +262,15 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			s.userVotes.PrintVotes()
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
 			if !utils.AreTownspersonAlive(s.users) && utils.AreWerewolvesAlive(s.users) {
+				s.broadcastMessage(ctx, "**GAME OVER**")
 				s.broadcastMessage(ctx, "Werewolves win")
+				s.logger.Info("Press Ctrl + C to exit")
+				return
 			} else if !utils.AreWerewolvesAlive(s.users) && utils.AreTownspersonAlive(s.users) {
-				s.broadcastMessage(ctx, "Townsperson win")
+				s.broadcastMessage(ctx, "**GAME OVER**")
+				s.broadcastMessage(ctx, "Townspeople win")
+				s.logger.Info("Press Ctrl + C to exit")
+				return
 			} else {
 				curr_state = 2
 			}
@@ -312,9 +328,9 @@ func (s *server) handleMessage(ctx *actor.Context) {
 				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
 					"Please select the elements from the list only.."))
 			} else {
-				fmt.Printf("%v has chosen to kill %v",
+				s.logger.Info(fmt.Sprintf("%v has chosen to kill %v",
 					s.users[ctx.Sender().GetAddress()].Name,
-					msg)
+					msg))
 				if curr_state == 3 {
 					s.werewolvesVotes.AddVote(msg, s.users[ctx.Sender().GetAddress()].Name)
 				} else if curr_state == 5 {
@@ -353,7 +369,28 @@ func main() {
 		panic(err)
 	}
 
-	engine.Spawn(newServer, "server", actor.WithID("primary"))
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT)
+	serverPID := engine.Spawn(newServer, "server", actor.WithID("primary"))
+	slog.Info(fmt.Sprintf("Server running at PID : %v", serverPID))
 
-	select {}
+	for {
+		sig := <-sigCh
+		fmt.Printf("Received signal: %v\n", sig)
+		if sig == os.Interrupt {
+			// Create a waitgroup so we can wait until foo has been stopped gracefully
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+
+			go func() {
+				engine.Poison(serverPID, wg)
+				time.Sleep(time.Second * 10)
+				wg.Done()
+			}()
+
+			wg.Wait()
+
+			os.Exit(1)
+		}
+	}
 }

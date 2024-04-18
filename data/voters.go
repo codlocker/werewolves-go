@@ -38,7 +38,7 @@ func (voters *Voters) GetMaxVotedUser() string {
 			dead_users = append(dead_users, user)
 		}
 	}
-	if len(dead_users) > 1 {
+	if len(dead_users) > 1 || len(dead_users) == 0 {
 		return ""
 	} else {
 		return dead_users[0]
