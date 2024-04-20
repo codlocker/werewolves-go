@@ -21,12 +21,23 @@ import (
 
 type clientMap map[string]*actor.PID
 type userMap map[string]*data.Client
+type State int
+
+const (
+	connect State = iota + 1
+	start
+	werewolfdiscuss
+	werewolfvote
+	townpersondiscussion
+	townspersonvote
+	end
+	SLen = iota
+)
 
 var gameSet bool
 
-var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 1
-var curr_state int = 0
+var curr_state State = 1
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
@@ -105,7 +116,7 @@ func (s *server) Receive(ctx *actor.Context) {
 		delete(s.clients, cAddr)
 		delete(s.users, username.Name)
 	case *types.Connect:
-		if curr_state != 0 {
+		if curr_state != 1 {
 			ctx.Send(ctx.Sender(), &types.Message{
 				Username: "server/primary",
 				Msg:      "Game has already started.",
@@ -139,10 +150,10 @@ func (s *server) Receive(ctx *actor.Context) {
 func (s *server) gameChannel(ctx *actor.Context) {
 	for {
 		time.Sleep(10 * time.Second)
-		switch states[curr_state] {
-		case "connect":
+		switch curr_state {
+		case connect:
 			end_time := state_start_time.Add(connection_duration)
-			fmt.Printf("End time for state %v = %v\n", states[curr_state], end_time)
+			fmt.Printf("End time for state %v = %v\n", curr_state, end_time)
 
 			if len(s.users) >= min_players_required {
 				s.broadcastMessage(ctx, "Minimum players reached. Ready to begin in 60 seconds!!")
@@ -156,7 +167,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
 				utils.PrintUsers(s.users)
 				utils.SendIdentities(s.users, s.clients, ctx)
-				curr_state = (curr_state + 1) % len(states)
+				curr_state = (curr_state + 1) % State(SLen)
 			} else {
 				if time.Now().After(end_time) {
 					state_start_time = time.Now()
@@ -165,11 +176,11 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					s.broadcastMessage(ctx, "Waiting for players....")
 				}
 			}
-		case "start":
+		case start:
 			// Message everyone
 			s.broadcastMessage(ctx, "Night falls and the town sleeps.  Everyone close your eyes")
-			curr_state = (curr_state + 1) % len(states)
-		case "werewolfdiscuss":
+			curr_state = (curr_state + 1) % State(SLen)
+		case werewolfdiscuss:
 			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
@@ -188,8 +199,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % len(states)
-		case "werewolfvote":
+			curr_state = (curr_state + 1) % State(SLen)
+		case werewolfvote:
 			s.werewolvesVotes = data.NewVoters(
 				utils.GetListofUsernames(s.users))
 
@@ -204,8 +215,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % len(states)
-		case "townpersondiscussion":
+			curr_state = (curr_state + 1) % State(SLen)
+		case townpersondiscussion:
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
 			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
 			if max_voted_guy == "" {
@@ -225,8 +236,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % len(states)
-		case "townspersonvote":
+			curr_state = (curr_state + 1) % State(SLen)
+		case townspersonvote:
 			// Initialize user voter instance.
 			s.userVotes = data.NewVoters(utils.GetListofUsernames(s.users))
 
@@ -248,8 +259,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % len(states)
-		case "end":
+			curr_state = (curr_state + 1) % State(SLen)
+		case end:
 			max_voted_guy := s.userVotes.GetMaxVotedUser()
 
 			if max_voted_guy == "" {
@@ -272,7 +283,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.logger.Info("Press Ctrl + C to exit")
 				return
 			} else {
-				curr_state = 2
+				curr_state = werewolfdiscuss
 			}
 
 			s.userVotes.ClearVotes()
@@ -302,7 +313,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	}
 
 	// Do not accept messages if the game has ended
-	if curr_state == len(states)-1 {
+	if curr_state == State(SLen)-1 {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
@@ -310,7 +321,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	}
 
 	// Check for discussion state of werewolves or witch or townsperson
-	if curr_state == 2 || curr_state == 3 {
+	if curr_state == werewolfdiscuss || curr_state == werewolfvote {
 		allowedUsers = s.werewolves
 	} else {
 		allowedUsers = s.users
@@ -319,7 +330,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	// Only allow messages to be processed if they are in the allowed list
 	if utils.IsUsernameAllowed(username, allowedUsers) {
 		// Evaluate messages for voting
-		if curr_state == 3 || curr_state == 5 {
+		if curr_state == werewolfvote || curr_state == townspersonvote {
 			user_names := utils.GetListofUsernames(s.users)
 			fmt.Println(user_names)
 			msg := ctx.Message().(*types.Message).Msg
@@ -331,15 +342,15 @@ func (s *server) handleMessage(ctx *actor.Context) {
 				s.logger.Info(fmt.Sprintf("%v has chosen to kill %v",
 					s.users[ctx.Sender().GetAddress()].Name,
 					msg))
-				if curr_state == 3 {
+				if curr_state == werewolfvote {
 					s.werewolvesVotes.AddVote(msg, s.users[ctx.Sender().GetAddress()].Name)
-				} else if curr_state == 5 {
+				} else if curr_state == townspersonvote {
 					s.userVotes.AddVote(msg, s.users[ctx.Sender().GetAddress()].Name)
 				}
 			}
 		}
 
-		if curr_state != 3 && curr_state != 5 {
+		if curr_state != werewolfvote && curr_state != townspersonvote {
 			for caddr := range allowedUsers {
 				// dont send message to the place where it came from.
 				pid := s.clients[caddr]
@@ -352,7 +363,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		}
 	} else {
 		ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
-			fmt.Sprintf("You are not allowed to send messages in %v", states[curr_state])))
+			fmt.Sprintf("You are not allowed to send messages in %v", curr_state)))
 	}
 }
 
