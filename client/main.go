@@ -79,8 +79,9 @@ func main() {
 			slog.Error("Username cannot be empty")
 			slog.Info("Please enter username: ")
 			fmt.Scan(username)
-			break
+			continue
 		}
+		break
 	}
 
 	if *listenAt == "" {

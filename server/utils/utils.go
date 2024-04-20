@@ -40,6 +40,13 @@ func GetAliveWerewolves(users map[string]*data.Client, clients map[string]*actor
 	return pidList
 }
 
+func SendIdentities(users map[string]*data.Client, clients map[string]*actor.PID, ctx *actor.Context) {
+	for caddr, pid := range clients {
+		role := users[caddr].Role
+		ctx.Send(pid, FormatMessageResponseFromServer(fmt.Sprintf("========== You are a %v =========", role)))
+	}
+}
+
 func GetAliveTownperson(users map[string]*data.Client, clients map[string]*actor.PID) []*actor.PID {
 
 	var pidList []*actor.PID
