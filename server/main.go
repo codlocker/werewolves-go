@@ -36,6 +36,7 @@ const (
 
 var gameSet bool
 
+var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 1
 var curr_state State = 1
 var min_players_required int = 2

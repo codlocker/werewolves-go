@@ -2,10 +2,12 @@ package utils
 
 import (
 	"fmt"
+	"github.com/anthdm/hollywood/actor"
+	"log/slog"
+	"math/rand/v2"
+	"slices"
 	"werewolves-go/data"
 	"werewolves-go/types"
-
-	"github.com/anthdm/hollywood/actor"
 )
 
 func AreWerewolvesAlive(users map[string]*data.Client) bool {
@@ -100,26 +102,47 @@ func IsUsernameAllowed(username string, users map[string]*data.Client) bool {
 }
 
 func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Client, number_of_werewolves int) {
-
-	user_names := GetListofUsernames(users)
-
-	// Set up werewolf
-	for i := 0; i < number_of_werewolves; i++ {
-		caddr := GetCAddrFromUsername(users, user_names[i])
-		if users[caddr].Role == "" {
-			if entry, ok := users[caddr]; ok {
-				entry.Role = "werewolf"
-				users[caddr] = entry
-				werewolves[caddr] = entry
-			}
+	//create a list of unique random numbers. length of list is equal to the number of werewolves you want in the
+	//game.
+	var listRand []int
+	for i := 0; i < number_of_werewolves; {
+		randNum := rand.IntN(10000) % len(users)
+		if slices.Contains(listRand, randNum) {
+			//randNum already present in our list - so re-run the random number generation again
+		} else {
+			listRand = append(listRand, randNum)
+			i++
 		}
 	}
 
-	// Set up townsperson
-	for caddr, user := range users {
-		if user.Role == "" {
-			user.Role = "townsperson"
-			users[caddr] = user
+	user_names := GetListofUsernames(users)
+	slog.Info(fmt.Sprintf("listRand = %v :These indices in %v will be the werewolves.\n", listRand, user_names))
+
+	for i, userName := range user_names {
+		var assignWerewolf = false
+		for _, randNum := range listRand {
+			if randNum == i {
+				assignWerewolf = true
+			}
+		}
+		caddr := GetCAddrFromUsername(users, user_names[i])
+		if assignWerewolf {
+			if users[caddr].Role == "" { //performing an additional sanity check with this line
+				if entry, ok := users[caddr]; ok {
+					entry.Role = "werewolf"
+					users[caddr] = entry
+					werewolves[caddr] = entry
+				}
+				slog.Info(userName + " has been assigned to be a werewolf")
+			}
+		} else {
+			if users[caddr].Role == "" { //performing an additional sanity check with this line
+				if entry, ok := users[caddr]; ok {
+					entry.Role = "townsperson"
+					users[caddr] = entry
+				}
+				slog.Info(userName + " has been assigned to be a townsperson")
+			}
 		}
 	}
 }
