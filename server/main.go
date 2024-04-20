@@ -25,7 +25,7 @@ type userMap map[string]*data.Client
 var gameSet bool
 
 var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
-var number_werewolves int = 1
+var number_werewolves int = 2
 var curr_state int = 0
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
