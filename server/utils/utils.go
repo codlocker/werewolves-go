@@ -148,6 +148,7 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 }
 
 func PrintUsers(users map[string]*data.Client) {
+	fmt.Println("Print Users")
 	for user, data := range users {
 		fmt.Printf(
 			"%v has been assigned %v username, has role %v with alive status %v\n",
