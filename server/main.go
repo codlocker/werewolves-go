@@ -21,12 +21,24 @@ import (
 
 type clientMap map[string]*actor.PID
 type userMap map[string]*data.Client
+type State int
+
+// Enumerating the possible game states
+const (
+	connect State = iota + 1
+	start
+	werewolfdiscuss
+	werewolfvote
+	townpersondiscussion
+	townspersonvote
+	end
+	ILen int = iota // total no. of states
+)
 
 var gameSet bool
 
-var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 1
-var curr_state int = 0
+var curr_state State = 1
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
@@ -139,8 +151,8 @@ func (s *server) Receive(ctx *actor.Context) {
 func (s *server) gameChannel(ctx *actor.Context) {
 	for {
 		time.Sleep(10 * time.Second)
-		switch states[curr_state] {
-		case "connect":
+		switch curr_state {
+		case connect:
 			end_time := state_start_time.Add(connection_duration)
 			fmt.Printf("End time for state %v = %v\n", states[curr_state], end_time)
 
@@ -156,7 +168,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
 				utils.PrintUsers(s.users)
 				utils.SendIdentities(s.users, s.clients, ctx)
-				curr_state = (curr_state + 1) % len(states)
+				curr_state = (curr_state + 1) % State(ILen)
 			} else {
 				if time.Now().After(end_time) {
 					state_start_time = time.Now()
@@ -165,10 +177,10 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					s.broadcastMessage(ctx, "Waiting for players....")
 				}
 			}
-		case "start":
+		case start:
 			// Message everyone
 			s.broadcastMessage(ctx, "Night falls and the town sleeps.  Everyone close your eyes")
-			curr_state = (curr_state + 1) % len(states)
+			curr_state = (curr_state + 1) % State(ILen)
 		case "werewolfdiscuss":
 			// Message werewolves
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
