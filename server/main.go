@@ -149,6 +149,7 @@ func (s *server) Receive(ctx *actor.Context) {
 }
 
 func (s *server) gameChannel(ctx *actor.Context) {
+	var count int32 //counter for no. of rounds
 	for {
 		time.Sleep(10 * time.Second)
 		switch curr_state {
@@ -183,6 +184,9 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			curr_state = (curr_state + 1) % State(SLen)
 		case werewolfdiscuss:
 			// Message werewolves
+			count += 1 //increment counter
+			s.broadcastMessage(ctx, fmt.Sprintf("========== Round: %d ==========", count))
+
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
 			pidList := utils.GetAliveWerewolves(s.users, s.clients)
