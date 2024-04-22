@@ -36,9 +36,9 @@ const (
 
 var gameSet bool
 
-var number_werewolves int = 1
+var number_werewolves int = 2
 var curr_state State = connect
-var min_players_required int = 2
+var min_players_required int = 4
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
 var werewolf_discussion_duration time.Duration = 60 * time.Second
@@ -150,11 +150,11 @@ func (s *server) Receive(ctx *actor.Context) {
 func (s *server) gameChannel(ctx *actor.Context) {
 	var count int32 //counter for no. of rounds
 	for {
-		time.Sleep(10 * time.Second)
 		switch curr_state {
 		case connect:
 			end_time := state_start_time.Add(connection_duration)
 			fmt.Printf("End time for state %v = %v\n", State.String(curr_state), end_time)
+			time.Sleep(10 * time.Second)
 
 			if len(s.users) >= min_players_required {
 				s.broadcastMessage(ctx, "Minimum players reached. Ready to begin in 60 seconds!!")
@@ -187,15 +187,18 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			s.broadcastMessage(ctx, fmt.Sprintf("========== Round: %d ==========", count))
 
 			s.broadcastMessage(ctx, "Werewolves, open your eyes.")
-			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
-			pidList := utils.GetAliveWerewolves(s.users, s.clients)
 
-			for _, pid := range pidList {
-				msgResponse := utils.FormatMessageResponseFromServer(
-					"Choose the player to kill: " + strings.Join(utils.GetListofUsernames(s.users), ","))
-				ctx.Send(pid, msgResponse)
+			// Go to end or werewolf if number of werewolves is less than 1.
+			if utils.CountWerewolvesAlive(s.users) == 1 {
+				s.logger.Info(fmt.Sprintf("Not enough werewolves alive for %v state", State.String(curr_state)))
+				curr_state = werewolfvote
+				continue
+			} else if utils.CountWerewolvesAlive(s.users) == 0 {
+				curr_state = end
+				continue
 			}
 
+			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", werewolf_discussion_duration))
 			state_end_time := time.Now().Add(werewolf_discussion_duration)
 			for {
 				if time.Now().After(state_end_time) {
@@ -205,6 +208,14 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 			curr_state = (curr_state + 1) % State(SLen)
 		case werewolfvote:
+			pidList := utils.GetAliveWerewolves(s.users, s.clients)
+
+			for _, pid := range pidList {
+				msgResponse := utils.FormatMessageResponseFromServer(
+					"Choose the player to kill: " + strings.Join(utils.GetListofUsernames(s.users), ","))
+				ctx.Send(pid, msgResponse)
+			}
+
 			s.werewolvesVotes = data.NewVoters(
 				utils.GetListofUsernames(s.users))
 
@@ -232,6 +243,13 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
+
+			// Skip to end stage if the number of users equal to 1.
+			if utils.CountUsersAlive(s.users) <= 1 {
+				curr_state = end
+				continue
+			}
+
 			s.broadcastMessage(ctx, fmt.Sprintf("You have %v time to discuss", townsperson_discussion_duration))
 			state_end_time := time.Now().Add(townsperson_discussion_duration)
 			for {
@@ -290,6 +308,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.broadcastMessage(ctx, "**GAME OVER**")
 				s.broadcastMessage(ctx, "Everyone died")
 				s.logger.Info("Press Ctrl + C to exit")
+				return
 			} else {
 				curr_state = werewolfdiscuss
 			}
