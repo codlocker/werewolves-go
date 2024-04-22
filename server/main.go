@@ -24,7 +24,7 @@ type userMap map[string]*data.Client
 type State int
 
 const (
-	connect State = iota + 1
+	connect State = iota
 	start
 	werewolfdiscuss
 	werewolfvote
@@ -36,9 +36,8 @@ const (
 
 var gameSet bool
 
-var states = [7]string{"connect", "start", "werewolfdiscuss", "werewolfvote", "townpersondiscussion", "townspersonvote", "end"}
 var number_werewolves int = 1
-var curr_state State = 1
+var curr_state State = connect
 var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
@@ -105,19 +104,19 @@ func (s *server) Receive(ctx *actor.Context) {
 		cAddr := ctx.Sender().GetAddress()
 		pid, ok := s.clients[cAddr]
 		if !ok {
-			s.logger.Warn("unknown client disconnected", "client", pid.Address)
+			s.logger.Warn("unknown client disconnected", "client", cAddr)
 			return
 		}
 		username, ok := s.users[cAddr]
 		if !ok {
-			s.logger.Warn("unknown user disconnected", "client", pid.Address)
+			s.logger.Warn("unknown user disconnected", "client", cAddr)
 			return
 		}
-		s.logger.Info("client disconnected", "username", username)
+		s.logger.Info("client disconnected", "username", username, "pid", pid)
 		delete(s.clients, cAddr)
-		delete(s.users, username.Name)
+		delete(s.users, cAddr)
 	case *types.Connect:
-		if curr_state != 1 {
+		if curr_state != connect {
 			ctx.Send(ctx.Sender(), &types.Message{
 				Username: "server/primary",
 				Msg:      "Game has already started.",
@@ -155,7 +154,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 		switch curr_state {
 		case connect:
 			end_time := state_start_time.Add(connection_duration)
-			fmt.Printf("End time for state %v = %v\n", curr_state, end_time)
+			fmt.Printf("End time for state %v = %v\n", State.String(curr_state), end_time)
 
 			if len(s.users) >= min_players_required {
 				s.broadcastMessage(ctx, "Minimum players reached. Ready to begin in 60 seconds!!")
@@ -264,8 +263,6 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % State(SLen)
-		case end:
 			max_voted_guy := s.userVotes.GetMaxVotedUser()
 
 			if max_voted_guy == "" {
@@ -276,6 +273,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			}
 
 			s.userVotes.PrintVotes()
+			curr_state = (curr_state + 1) % State(SLen)
+		case end:
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
 			if !utils.AreTownspersonAlive(s.users) && utils.AreWerewolvesAlive(s.users) {
 				s.broadcastMessage(ctx, "**GAME OVER**")
@@ -287,11 +286,13 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.broadcastMessage(ctx, "Townspeople win")
 				s.logger.Info("Press Ctrl + C to exit")
 				return
+			} else if !utils.AreWerewolvesAlive(s.users) && !utils.AreTownspersonAlive(s.users) {
+				s.broadcastMessage(ctx, "**GAME OVER**")
+				s.broadcastMessage(ctx, "Everyone died")
+				s.logger.Info("Press Ctrl + C to exit")
 			} else {
 				curr_state = werewolfdiscuss
 			}
-
-			s.userVotes.ClearVotes()
 		default:
 			fmt.Println("State not found")
 		}
@@ -318,7 +319,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	}
 
 	// Do not accept messages if the game has ended
-	if curr_state == State(SLen)-1 {
+	if curr_state == State(SLen) {
 		ctx.Send(
 			ctx.Sender(),
 			utils.FormatMessageResponseFromServer("The game has ended. Thank you for playing!"))
@@ -368,7 +369,29 @@ func (s *server) handleMessage(ctx *actor.Context) {
 		}
 	} else {
 		ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
-			fmt.Sprintf("You are not allowed to send messages in %v", curr_state)))
+			fmt.Sprintf("You are not allowed to send messages in %v", State.String(curr_state))))
+	}
+}
+
+// Enum to string
+func (state State) String() string {
+	switch state {
+	case connect:
+		return "connect"
+	case start:
+		return "start"
+	case werewolfdiscuss:
+		return "werewolfdiscuss"
+	case werewolfvote:
+		return "werewolfvote"
+	case townpersondiscussion:
+		return "townpersondiscussion"
+	case townspersonvote:
+		return "townspersonvote"
+	case end:
+		return "end"
+	default:
+		return ""
 	}
 }
 
