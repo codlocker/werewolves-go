@@ -2,12 +2,13 @@ package utils
 
 import (
 	"fmt"
-	"github.com/anthdm/hollywood/actor"
 	"log/slog"
 	"math/rand/v2"
 	"slices"
 	"werewolves-go/data"
 	"werewolves-go/types"
+
+	"github.com/anthdm/hollywood/actor"
 )
 
 func AreWerewolvesAlive(users map[string]*data.Client) bool {
@@ -20,6 +21,17 @@ func AreWerewolvesAlive(users map[string]*data.Client) bool {
 	return false
 }
 
+func CountWerewolvesAlive(users map[string]*data.Client) int {
+	count := 0
+	for _, user := range users {
+		if user.Status && user.Role == "werewolf" {
+			count++
+		}
+	}
+
+	return count
+}
+
 func AreTownspersonAlive(users map[string]*data.Client) bool {
 	for _, user := range users {
 		if user.Status && user.Role == "townsperson" {
@@ -28,6 +40,17 @@ func AreTownspersonAlive(users map[string]*data.Client) bool {
 	}
 
 	return false
+}
+
+func CountUsersAlive(users map[string]*data.Client) int {
+	count := 0
+	for _, user := range users {
+		if user.Status {
+			count++
+		}
+	}
+
+	return count
 }
 
 func GetAliveWerewolves(users map[string]*data.Client, clients map[string]*actor.PID) []*actor.PID {
