@@ -36,9 +36,9 @@ const (
 
 var gameSet bool
 
-var number_werewolves int = 2
+var number_werewolves int = 1
 var curr_state State = connect
-var min_players_required int = 4
+var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
 var werewolf_discussion_duration time.Duration = 60 * time.Second
@@ -259,8 +259,6 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			curr_state = (curr_state + 1) % State(SLen)
-		case end:
 			max_voted_guy := s.userVotes.GetMaxVotedUser()
 
 			if max_voted_guy == "" {
@@ -271,6 +269,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			}
 
 			s.userVotes.PrintVotes()
+			curr_state = (curr_state + 1) % State(SLen)
+		case end:
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
 			if !utils.AreTownspersonAlive(s.users) && utils.AreWerewolvesAlive(s.users) {
 				s.broadcastMessage(ctx, "**GAME OVER**")
@@ -282,11 +282,13 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				s.broadcastMessage(ctx, "Townspeople win")
 				s.logger.Info("Press Ctrl + C to exit")
 				return
+			} else if !utils.AreWerewolvesAlive(s.users) && !utils.AreTownspersonAlive(s.users) {
+				s.broadcastMessage(ctx, "**GAME OVER**")
+				s.broadcastMessage(ctx, "Everyone died")
+				s.logger.Info("Press Ctrl + C to exit")
 			} else {
 				curr_state = werewolfdiscuss
 			}
-
-			s.userVotes.ClearVotes()
 		default:
 			fmt.Println("State not found")
 		}
