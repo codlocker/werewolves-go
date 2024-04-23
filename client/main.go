@@ -100,7 +100,7 @@ func main() {
 		scanner   = bufio.NewScanner(os.Stdin)
 	)
 
-	// Interrupt handling - should be written more cleanly
+	// Interrupt handling
 	exitChan := getFireSignalsChannel()
 	go func() {
 		<-exitChan
