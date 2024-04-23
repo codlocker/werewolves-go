@@ -21,6 +21,20 @@ func AreWerewolvesAlive(users map[string]*data.Client) bool {
 	return false
 }
 
+func IsWitchAlive(users map[string]*data.Client) bool {
+	for _, user := range users {
+		if user.Status && user.Role == "witch" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func IsUserAlive(user *data.Client) bool {
+	return user.Status
+}
+
 func CountWerewolvesAlive(users map[string]*data.Client) int {
 	count := 0
 	for _, user := range users {
@@ -34,7 +48,7 @@ func CountWerewolvesAlive(users map[string]*data.Client) int {
 
 func AreTownspersonAlive(users map[string]*data.Client) bool {
 	for _, user := range users {
-		if user.Status && user.Role == "townsperson" {
+		if user.Status && (user.Role == "townsperson" || user.Role == "witch") {
 			return true
 		}
 	}
@@ -63,6 +77,18 @@ func GetAliveWerewolves(users map[string]*data.Client, clients map[string]*actor
 	}
 
 	return pidList
+}
+
+func GetAliveWitch(users map[string]*data.Client, clients map[string]*actor.PID) *actor.PID {
+
+	var pid *actor.PID
+	for cAddr, data := range users {
+		if data.Role == "witch" && data.Status {
+			pid = clients[cAddr]
+		}
+	}
+
+	return pid
 }
 
 func SendIdentities(users map[string]*data.Client, clients map[string]*actor.PID, ctx *actor.Context) {
@@ -124,7 +150,7 @@ func IsUsernameAllowed(username string, users map[string]*data.Client) bool {
 	return false
 }
 
-func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Client, number_of_werewolves int) {
+func SetUpRoles(users map[string]*data.Client, witches map[string]*data.Client, werewolves map[string]*data.Client, number_of_werewolves int) {
 	//create a list of unique random numbers. length of list is equal to the number of werewolves you want in the
 	//game.
 	var listRand []int
@@ -138,15 +164,30 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 		}
 	}
 
+	// assign the witch role to a player - checks whether that player is already assigned to be a werewolf.
+	var witchRand int = 0
+	for {
+		witchRand := rand.IntN(10000) % len(users)
+		if slices.Contains(listRand, witchRand) {
+			//randNum already present in our list - so re-run the random number generation again
+		} else {
+			break
+		}
+	}
+
 	user_names := GetListofUsernames(users)
 	slog.Info(fmt.Sprintf("listRand = %v :These indices in %v will be the werewolves.\n", listRand, user_names))
 
 	for i, userName := range user_names {
 		var assignWerewolf = false
+		var assignWitch = false
 		for _, randNum := range listRand {
 			if randNum == i {
 				assignWerewolf = true
 			}
+		}
+		if witchRand == i {
+			assignWitch = true
 		}
 		caddr := GetCAddrFromUsername(users, user_names[i])
 		if assignWerewolf {
@@ -157,6 +198,15 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 					werewolves[caddr] = entry
 				}
 				slog.Info(userName + " has been assigned to be a werewolf")
+			}
+		} else if assignWitch {
+			if users[caddr].Role == "" { //performing an additional sanity check with this line
+				if entry, ok := users[caddr]; ok {
+					entry.Role = "witch"
+					users[caddr] = entry
+					witches[caddr] = entry
+				}
+				slog.Info(userName + " has been assigned to be a witch")
 			}
 		} else {
 			if users[caddr].Role == "" { //performing an additional sanity check with this line
