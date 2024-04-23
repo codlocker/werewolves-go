@@ -244,8 +244,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
 
-			// Skip to end stage if the number of users equal to 1.
-			if utils.CountUsersAlive(s.users) <= 1 {
+			// Skip to end stage if the number of users equal to 1 or when only werewolves remain.
+			if (utils.CountUsersAlive(s.users) <= 1) || (utils.CountUsersAlive(s.users) == utils.CountWerewolvesAlive(s.users)) {
 				curr_state = end
 				continue
 			}
