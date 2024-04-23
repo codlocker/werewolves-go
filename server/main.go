@@ -363,6 +363,9 @@ func (s *server) handleMessage(ctx *actor.Context) {
 			if !slices.Contains(user_names, msg) {
 				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
 					"Please select the elements from the list only.."))
+			} else if username == msg {
+				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+					"Practice self-love, not self-harm. Suicidal tendencies are admonished, go visit a therapist! Choose another player to kill."))
 			} else {
 				s.logger.Info(fmt.Sprintf("%v has chosen to kill %v",
 					s.users[ctx.Sender().GetAddress()].Name,
