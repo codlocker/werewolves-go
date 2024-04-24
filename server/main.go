@@ -47,6 +47,7 @@ var townsperson_discussion_duration time.Duration = 10 * time.Second
 var voting_duration time.Duration = 20 * time.Second
 var witch_heal_duration time.Duration = 10 * time.Second
 var healPotions int = 1
+var healed_player string = ""
 
 type server struct {
 	clients         clientMap
@@ -85,25 +86,6 @@ func (s *server) markGuyAsDead(max_voted_guy string) {
 	if entry, ok := s.witches[dead_user_address]; ok {
 		entry.Status = false
 		s.werewolves[dead_user_address] = entry
-	}
-}
-
-func (s *server) healGuy(guy_to_heal string) {
-
-	make_alive_user_address := utils.GetCAddrFromUsername(s.users, guy_to_heal)
-	if entry, ok := s.users[make_alive_user_address]; ok {
-		entry.Status = true
-		s.users[make_alive_user_address] = entry
-	}
-
-	if entry, ok := s.werewolves[make_alive_user_address]; ok {
-		entry.Status = true
-		s.werewolves[make_alive_user_address] = entry
-	}
-
-	if entry, ok := s.witches[make_alive_user_address]; ok {
-		entry.Status = true
-		s.witches[make_alive_user_address] = entry
 	}
 }
 
@@ -259,7 +241,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 			curr_state = (curr_state + 1) % State(SLen)
 		case witchheal:
-			if utils.IsWitchAlive(s.users) {
+			if utils.IsWitchAlive(s.users) && healPotions > 0 {
 				s.broadcastMessage(ctx, "Witch is now healing someone")
 
 				pid := utils.GetAliveWitch(s.users, s.clients)
@@ -275,30 +257,27 @@ func (s *server) gameChannel(ctx *actor.Context) {
 						break
 					}
 				}
+			} else if healPotions == 0 {
+				s.broadcastMessage(ctx, "Witched has used up all healing potions")
 			} else {
-				s.broadcastMessage(ctx, "Witch is already resting in peace. No healing scheduled for today.")
+				s.broadcastMessage(ctx, "Witch is already resting in peace. No healing scheduled for today")
 			}
 			curr_state = (curr_state + 1) % State(SLen)
 		case townpersondiscussion:
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
 
-			// This part is a little unclean - had to do this to get the user from the username.
-			max_voted_guy_address := utils.GetCAddrFromUsername(s.users, max_voted_guy)
-			var max_voted_user *data.Client = s.users[max_voted_guy_address]
-			if max_voted_user, ok := s.users[max_voted_guy_address]; ok {
-				s.users[max_voted_guy_address] = max_voted_user
-			}
-
 			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
 			if max_voted_guy == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
-			} else if utils.IsUserAlive(max_voted_user) {
+			} else if healed_player == max_voted_guy {
 				s.broadcastMessage(ctx, fmt.Sprintf("The werewolves chose to kill %v but he was healed", max_voted_guy))
 			} else {
 				s.markGuyAsDead(max_voted_guy)
 				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			//reset the healed player for the next round
+			healed_player = ""
 			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
 
@@ -447,7 +426,7 @@ func (s *server) handleMessage(ctx *actor.Context) {
 				s.logger.Info(fmt.Sprintf("%v has chosen to heal %v",
 					s.users[ctx.Sender().GetAddress()].Name,
 					msg))
-				s.healGuy(msg)
+				healed_player = msg
 				healPotions -= 1
 			} else {
 				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(

@@ -169,7 +169,7 @@ func SetUpRoles(users map[string]*data.Client, witches map[string]*data.Client, 
 	for {
 		witchRand := rand.IntN(10000) % len(users)
 		if slices.Contains(listRand, witchRand) {
-			//randNum already present in our list - so re-run the random number generation again
+			//witchRand is a part of the werewolves list - so get a different random number
 		} else {
 			break
 		}
