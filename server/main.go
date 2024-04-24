@@ -19,10 +19,16 @@ import (
 	"github.com/anthdm/hollywood/remote"
 )
 
+/*
+ * Define types for different structures used in the server path.
+ */
 type clientMap map[string]*actor.PID
 type userMap map[string]*data.Client
 type State int
 
+/*
+ * Constants to define states of the werewolf game.
+ */
 const (
 	connect State = iota
 	start
@@ -34,8 +40,12 @@ const (
 	SLen = iota
 )
 
+// The gameset variable defines the start of a game channel once the server starts receiving
+// connections.
 var gameSet bool
 
+// Differents constants for the program
+// TODO : Move to a config file.
 var number_werewolves int = 2
 var curr_state State = connect
 var min_players_required int = 4
@@ -45,6 +55,10 @@ var werewolf_discussion_duration time.Duration = 60 * time.Second
 var townsperson_discussion_duration time.Duration = 120 * time.Second
 var voting_duration time.Duration = 60 * time.Second
 
+/*
+ * Server structure that initates the clients, users and logger
+ * parameters required by the server.
+ */
 type server struct {
 	clients         clientMap
 	users           userMap
@@ -55,6 +69,9 @@ type server struct {
 	logger          *slog.Logger
 }
 
+/*
+ * Instantiate a receiver actor for the server struct.
+ */
 func newServer() actor.Receiver {
 	gameSet = false
 	return &server{
@@ -66,6 +83,9 @@ func newServer() actor.Receiver {
 	}
 }
 
+/*
+ * Marks a player as dead based on the user with max votes.
+ */
 func (s *server) markGuyAsDead(max_voted_guy string) {
 
 	dead_user_address := utils.GetCAddrFromUsername(s.users, max_voted_guy)
@@ -80,6 +100,10 @@ func (s *server) markGuyAsDead(max_voted_guy string) {
 	}
 }
 
+/*
+ * Receive messages from other actors.
+ * Initiate go channel and work through different message types.
+ */
 func (s *server) Receive(ctx *actor.Context) {
 	if !gameSet {
 		gameSet = true
@@ -147,6 +171,10 @@ func (s *server) Receive(ctx *actor.Context) {
 	}
 }
 
+/*
+ * Loops through all the states for werewolves and determines message
+ * parsing across multiple states and clients.
+ */
 func (s *server) gameChannel(ctx *actor.Context) {
 	var count int32 //counter for no. of rounds
 	for {
@@ -318,6 +346,9 @@ func (s *server) gameChannel(ctx *actor.Context) {
 	}
 }
 
+/*
+ * Broadcast message sends messages to all clients.
+ */
 func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 	msgResponse := utils.FormatMessageResponseFromServer(message)
 	for _, pid := range s.clients {
@@ -325,6 +356,10 @@ func (s *server) broadcastMessage(ctx *actor.Context, message string) {
 	}
 }
 
+/*
+ * Handle message takes into responses from client for Message type in gRPC
+ * and performs action for sending or computation accordingly.
+ */
 func (s *server) handleMessage(ctx *actor.Context) {
 	var allowedUsers map[string]*data.Client
 	var username string = ctx.Message().(*types.Message).Username
@@ -414,6 +449,7 @@ func (state State) String() string {
 	}
 }
 
+// Entry point to the server program.
 func main() {
 	listenPort := flag.String("listen", "4000", "Enter the port number to open a receiver endpoint")
 	flag.Parse()

@@ -11,6 +11,9 @@ import (
 	"github.com/anthdm/hollywood/actor"
 )
 
+/*
+ * Checks if werewolves are alive.
+ */
 func AreWerewolvesAlive(users map[string]*data.Client) bool {
 	for _, user := range users {
 		if user.Status && user.Role == "werewolf" {
@@ -21,6 +24,9 @@ func AreWerewolvesAlive(users map[string]*data.Client) bool {
 	return false
 }
 
+/*
+ * Returns count of alive werewolves.
+ */
 func CountWerewolvesAlive(users map[string]*data.Client) int {
 	count := 0
 	for _, user := range users {
@@ -32,6 +38,9 @@ func CountWerewolvesAlive(users map[string]*data.Client) int {
 	return count
 }
 
+/*
+ * Checks if townpersons are alive.
+ */
 func AreTownspersonAlive(users map[string]*data.Client) bool {
 	for _, user := range users {
 		if user.Status && user.Role == "townsperson" {
@@ -42,6 +51,9 @@ func AreTownspersonAlive(users map[string]*data.Client) bool {
 	return false
 }
 
+/*
+ * Returns count of how many townpersons are alive.
+ */
 func CountUsersAlive(users map[string]*data.Client) int {
 	count := 0
 	for _, user := range users {
@@ -53,6 +65,9 @@ func CountUsersAlive(users map[string]*data.Client) int {
 	return count
 }
 
+/*
+ * Returns pidList of alive werewolves for communication.
+ */
 func GetAliveWerewolves(users map[string]*data.Client, clients map[string]*actor.PID) []*actor.PID {
 
 	var pidList []*actor.PID
@@ -65,6 +80,9 @@ func GetAliveWerewolves(users map[string]*data.Client, clients map[string]*actor
 	return pidList
 }
 
+/*
+ * Send identities of clients (werewolve / townsperson).
+ */
 func SendIdentities(users map[string]*data.Client, clients map[string]*actor.PID, ctx *actor.Context) {
 	for caddr, pid := range clients {
 		role := users[caddr].Role
@@ -72,6 +90,9 @@ func SendIdentities(users map[string]*data.Client, clients map[string]*actor.PID
 	}
 }
 
+/*
+ * Get PID list of alive users.
+ */
 func GetAliveTownperson(users map[string]*data.Client, clients map[string]*actor.PID) []*actor.PID {
 
 	var pidList []*actor.PID
@@ -84,6 +105,9 @@ func GetAliveTownperson(users map[string]*data.Client, clients map[string]*actor
 	return pidList
 }
 
+/*
+ * Returns list of usernames that are alive.
+ */
 func GetListofUsernames(users map[string]*data.Client) []string {
 	var userList []string
 	for _, data := range users {
@@ -95,6 +119,7 @@ func GetListofUsernames(users map[string]*data.Client) []string {
 	return userList
 }
 
+// Get address of the client based on the username for the client.
 func GetCAddrFromUsername(users map[string]*data.Client, username string) string {
 	for caddr, user := range users {
 		if user.Name == username {
@@ -105,6 +130,7 @@ func GetCAddrFromUsername(users map[string]*data.Client, username string) string
 	return ""
 }
 
+// Return messgae formatted as being sent by server.
 func FormatMessageResponseFromServer(message string) *types.Message {
 	msgResponse := &types.Message{
 		Username: "server/primary",
@@ -114,6 +140,7 @@ func FormatMessageResponseFromServer(message string) *types.Message {
 	return msgResponse
 }
 
+// Check if username is allowed to be used.
 func IsUsernameAllowed(username string, users map[string]*data.Client) bool {
 	for _, user := range users {
 		if user.Name == username {
@@ -124,6 +151,7 @@ func IsUsernameAllowed(username string, users map[string]*data.Client) bool {
 	return false
 }
 
+// Set up roles before initiating the game.
 func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Client, number_of_werewolves int) {
 	//create a list of unique random numbers. length of list is equal to the number of werewolves you want in the
 	//game.
@@ -170,6 +198,7 @@ func SetUpRoles(users map[string]*data.Client, werewolves map[string]*data.Clien
 	}
 }
 
+// Print all users.
 func PrintUsers(users map[string]*data.Client) {
 	fmt.Println("Print Users")
 	for user, data := range users {
