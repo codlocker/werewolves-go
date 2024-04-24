@@ -41,11 +41,11 @@ var number_werewolves int = 2
 var curr_state State = connect
 var min_players_required int = 4
 var state_start_time time.Time = time.Now()
-var connection_duration time.Duration = 30 * time.Second
-var werewolf_discussion_duration time.Duration = 10 * time.Second
-var townsperson_discussion_duration time.Duration = 10 * time.Second
-var voting_duration time.Duration = 20 * time.Second
-var witch_heal_duration time.Duration = 10 * time.Second
+var connection_duration time.Duration = 60 * time.Second
+var werewolf_discussion_duration time.Duration = 60 * time.Second
+var townsperson_discussion_duration time.Duration = 120 * time.Second
+var voting_duration time.Duration = 60 * time.Second
+var witch_heal_duration time.Duration = 30 * time.Second
 var healPotions int = 1
 var healed_player string = ""
 
