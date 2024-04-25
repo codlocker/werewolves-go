@@ -165,11 +165,11 @@ func SetUpRoles(users map[string]*data.Client, witches map[string]*data.Client, 
 	}
 
 	// assign the witch role to a player - checks whether that player is already assigned to be a werewolf.
-	var witchRand int = 0
+	var witchRand int = rand.IntN(10000) % len(users)
 	for {
-		witchRand := rand.IntN(10000) % len(users)
 		if slices.Contains(listRand, witchRand) {
 			//witchRand is a part of the werewolves list - so get a different random number
+			witchRand = rand.IntN(10000) % len(users)
 		} else {
 			break
 		}
@@ -189,6 +189,7 @@ func SetUpRoles(users map[string]*data.Client, witches map[string]*data.Client, 
 		if witchRand == i {
 			assignWitch = true
 		}
+
 		caddr := GetCAddrFromUsername(users, user_names[i])
 		if assignWerewolf {
 			if users[caddr].Role == "" { //performing an additional sanity check with this line
