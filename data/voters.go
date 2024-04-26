@@ -5,11 +5,17 @@ import (
 	"math"
 )
 
+/*
+ * Struct to count votes.
+ */
 type Voters struct {
 	user_vote   map[string]int
 	voted_users map[string]bool
 }
 
+/*
+ * New voters struct initialization.
+ */
 func NewVoters(users []string) *Voters {
 	v := &Voters{
 		user_vote:   make(map[string]int),
@@ -23,6 +29,10 @@ func NewVoters(users []string) *Voters {
 	return v
 }
 
+/*
+ * Returns user that has been voted maximum times.
+ * Returns a single possible. 2 or more players cannot be killed at the same time.
+ */
 func (voters *Voters) GetMaxVotedUser() string {
 	var dead_users []string
 	max_votes := math.MinInt
@@ -45,6 +55,7 @@ func (voters *Voters) GetMaxVotedUser() string {
 	}
 }
 
+// Add vote the votes list.
 func (voters *Voters) AddVote(user string, sender string) bool {
 	_, ok := voters.user_vote[user]
 	if ok && !voters.voted_users[sender] {
@@ -56,6 +67,7 @@ func (voters *Voters) AddVote(user string, sender string) bool {
 	}
 }
 
+// Clear the votes to reuse voting object.
 func (voter *Voters) ClearVotes() {
 	for user := range voter.user_vote {
 		voter.user_vote[user] = 0
@@ -64,6 +76,7 @@ func (voter *Voters) ClearVotes() {
 	voter.voted_users = nil
 }
 
+// Print user votes.
 func (voter *Voters) PrintVotes() {
 	fmt.Println("VOTES")
 	for user, vote := range voter.user_vote {
