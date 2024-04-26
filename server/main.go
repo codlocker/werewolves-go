@@ -34,6 +34,7 @@ const (
 	start
 	werewolfdiscuss
 	werewolfvote
+	witchheal
 	townpersondiscussion
 	townspersonvote
 	end
@@ -54,6 +55,9 @@ var connection_duration time.Duration = 60 * time.Second
 var werewolf_discussion_duration time.Duration = 60 * time.Second
 var townsperson_discussion_duration time.Duration = 120 * time.Second
 var voting_duration time.Duration = 60 * time.Second
+var witch_heal_duration time.Duration = 30 * time.Second
+var healPotions int = 1
+var healed_player string = ""
 
 /*
  * Server structure that initates the clients, users and logger
@@ -95,6 +99,11 @@ func (s *server) markGuyAsDead(max_voted_guy string) {
 	}
 
 	if entry, ok := s.werewolves[dead_user_address]; ok {
+		entry.Status = false
+		s.werewolves[dead_user_address] = entry
+	}
+
+	if entry, ok := s.witches[dead_user_address]; ok {
 		entry.Status = false
 		s.werewolves[dead_user_address] = entry
 	}
@@ -193,7 +202,7 @@ func (s *server) gameChannel(ctx *actor.Context) {
 					}
 				}
 
-				utils.SetUpRoles(s.users, s.werewolves, number_werewolves)
+				utils.SetUpRoles(s.users, s.witches, s.werewolves, number_werewolves)
 				utils.PrintUsers(s.users)
 				utils.SendIdentities(s.users, s.clients, ctx)
 				curr_state = (curr_state + 1) % State(SLen)
@@ -259,16 +268,44 @@ func (s *server) gameChannel(ctx *actor.Context) {
 			}
 
 			curr_state = (curr_state + 1) % State(SLen)
+		case witchheal:
+			if utils.IsWitchAlive(s.users) && healPotions > 0 {
+				s.broadcastMessage(ctx, "Witch is now healing someone")
+
+				pid := utils.GetAliveWitch(s.users, s.clients)
+
+				msgResponse := utils.FormatMessageResponseFromServer(
+					"Choose the player to heal: " + strings.Join(utils.GetListofUsernames(s.users), ","))
+				ctx.Send(pid, msgResponse)
+
+				state_end_time := time.Now().Add(witch_heal_duration)
+
+				for {
+					if time.Now().After(state_end_time) {
+						break
+					}
+				}
+			} else if healPotions == 0 {
+				s.broadcastMessage(ctx, "Witched has used up all healing potions")
+			} else {
+				s.broadcastMessage(ctx, "Witch is already resting in peace. No healing scheduled for today")
+			}
+			curr_state = (curr_state + 1) % State(SLen)
 		case townpersondiscussion:
 			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
+
 			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
 			if max_voted_guy == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
+			} else if healed_player == max_voted_guy {
+				s.broadcastMessage(ctx, fmt.Sprintf("The werewolves chose to kill %v but he was healed", max_voted_guy))
 			} else {
 				s.markGuyAsDead(max_voted_guy)
 				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
 			}
 
+			//reset the healed player for the next round
+			healed_player = ""
 			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
 
@@ -383,6 +420,8 @@ func (s *server) handleMessage(ctx *actor.Context) {
 	// Check for discussion state of werewolves or witch or townsperson
 	if curr_state == werewolfdiscuss || curr_state == werewolfvote {
 		allowedUsers = s.werewolves
+	} else if curr_state == witchheal {
+		allowedUsers = s.witches
 	} else {
 		allowedUsers = s.users
 	}
@@ -410,7 +449,27 @@ func (s *server) handleMessage(ctx *actor.Context) {
 			}
 		}
 
-		if curr_state != werewolfvote && curr_state != townspersonvote {
+		if curr_state == witchheal {
+			user_names := utils.GetListofUsernames(s.users)
+			fmt.Println(user_names)
+			msg := ctx.Message().(*types.Message).Msg
+
+			if !slices.Contains(user_names, msg) {
+				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+					"Please select the elements from the list only.."))
+			} else if healPotions > 0 {
+				s.logger.Info(fmt.Sprintf("%v has chosen to heal %v",
+					s.users[ctx.Sender().GetAddress()].Name,
+					msg))
+				healed_player = msg
+				healPotions -= 1
+			} else {
+				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
+					"No healing potions left!"))
+			}
+		}
+
+		if curr_state != werewolfvote && curr_state != townspersonvote && curr_state != witchheal {
 			for caddr := range allowedUsers {
 				// dont send message to the place where it came from.
 				pid := s.clients[caddr]
@@ -438,6 +497,8 @@ func (state State) String() string {
 		return "werewolfdiscuss"
 	case werewolfvote:
 		return "werewolfvote"
+	case witchheal:
+		return "witchheal"
 	case townpersondiscussion:
 		return "townpersondiscussion"
 	case townspersonvote:
