@@ -44,3 +44,19 @@ This repo creates the well known werewolves game using Go Programming language. 
       - Examples: ```./client username=b```
       - Examples: ```./client username=c```
       - Examples: ```./client username=d```
+
+POSSIBLE ERRORS
+
+- Go package missing or go.mod errors
+
+  - Run ``` go mod tidy ```
+
+- In case the above steps fail, you can directly run the code as follows
+
+  - Server code:
+    - ``` cd server/```
+    - ``` go run main.go```
+
+  - Client code:
+    - ``` cd client/```
+    - ``` go run main.go```
