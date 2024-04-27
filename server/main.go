@@ -47,9 +47,9 @@ var gameSet bool
 
 // Differents constants for the program
 // TODO : Move to a config file.
-var number_werewolves int = 2
+var number_werewolves int = 1
 var curr_state State = connect
-var min_players_required int = 4
+var min_players_required int = 2
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
 var werewolf_discussion_duration time.Duration = 60 * time.Second
@@ -64,13 +64,15 @@ var healed_player string = ""
  * parameters required by the server.
  */
 type server struct {
-	clients         clientMap
-	users           userMap
-	werewolves      userMap
-	werewolvesVotes *data.Voters
-	userVotes       *data.Voters
-	witches         userMap
-	logger          *slog.Logger
+	clients               clientMap
+	users                 userMap
+	werewolves            userMap
+	werewolvesVotes       *data.Voters
+	userVotes             *data.Voters
+	witches               userMap
+	logger                *slog.Logger
+	max_voted_by_werewolf string
+	max_voted_by_town     string
 }
 
 /*
@@ -79,11 +81,13 @@ type server struct {
 func newServer() actor.Receiver {
 	gameSet = false
 	return &server{
-		clients:    make(clientMap),
-		users:      make(userMap),
-		werewolves: make(userMap),
-		witches:    make(userMap),
-		logger:     slog.Default(),
+		clients:               make(clientMap),
+		users:                 make(userMap),
+		werewolves:            make(userMap),
+		witches:               make(userMap),
+		logger:                slog.Default(),
+		max_voted_by_werewolf: "",
+		max_voted_by_town:     "",
 	}
 }
 
@@ -269,13 +273,23 @@ func (s *server) gameChannel(ctx *actor.Context) {
 
 			curr_state = (curr_state + 1) % State(SLen)
 		case witchheal:
-			if utils.IsWitchAlive(s.users) && healPotions > 0 {
+			s.max_voted_by_werewolf = s.werewolvesVotes.GetMaxVotedUser()
+			s.broadcastMessage(ctx, "Witch, now its time to wake up")
+			if utils.IsWitchAlive(s.users) && healPotions > 0 && len(s.max_voted_by_werewolf) > 0 {
 				s.broadcastMessage(ctx, "Witch is now healing someone")
 
 				pid := utils.GetAliveWitch(s.users, s.clients)
 
+				// Send message for player to save.
 				msgResponse := utils.FormatMessageResponseFromServer(
-					"Choose the player to heal: " + strings.Join(utils.GetListofUsernames(s.users), ","))
+					fmt.Sprintf("The werewolves chose to kill %v", s.max_voted_by_werewolf))
+
+				ctx.Send(pid, msgResponse)
+
+				// Ask for response
+				msgResponse = utils.FormatMessageResponseFromServer(
+					"Enter name of killed user to save or type pass to skip")
+
 				ctx.Send(pid, msgResponse)
 
 				state_end_time := time.Now().Add(witch_heal_duration)
@@ -287,25 +301,23 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			} else if healPotions == 0 {
 				s.broadcastMessage(ctx, "Witched has used up all healing potions")
-			} else {
-				s.broadcastMessage(ctx, "Witch is already resting in peace. No healing scheduled for today")
 			}
+
 			curr_state = (curr_state + 1) % State(SLen)
 		case townpersondiscussion:
-			max_voted_guy := s.werewolvesVotes.GetMaxVotedUser()
-
 			s.broadcastMessage(ctx, "Townpeople, its time to wake up and listen to the news")
-			if max_voted_guy == "" {
+			if s.max_voted_by_werewolf == "" {
 				s.broadcastMessage(ctx, "Townspeople, the werewolf did not feed tonight")
-			} else if healed_player == max_voted_guy {
-				s.broadcastMessage(ctx, fmt.Sprintf("The werewolves chose to kill %v but he was healed", max_voted_guy))
+			} else if healed_player == s.max_voted_by_werewolf {
+				s.broadcastMessage(ctx, "The witch saved a person from being killed")
 			} else {
-				s.markGuyAsDead(max_voted_guy)
-				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", max_voted_guy))
+				s.markGuyAsDead(s.max_voted_by_werewolf)
+				s.broadcastMessage(ctx, fmt.Sprintf("The werewolf chose to kill %v", s.max_voted_by_werewolf))
 			}
 
 			//reset the healed player for the next round
 			healed_player = ""
+			s.max_voted_by_werewolf = ""
 			s.werewolvesVotes.PrintVotes()
 			s.werewolvesVotes.ClearVotes()
 
@@ -346,16 +358,17 @@ func (s *server) gameChannel(ctx *actor.Context) {
 				}
 			}
 
-			max_voted_guy := s.userVotes.GetMaxVotedUser()
+			s.max_voted_by_town = s.userVotes.GetMaxVotedUser()
 
-			if max_voted_guy == "" {
+			if s.max_voted_by_town == "" {
 				s.broadcastMessage(ctx, "The town could not reach a consensus. No one was kicked")
 			} else {
-				s.markGuyAsDead(max_voted_guy)
-				s.broadcastMessage(ctx, fmt.Sprintf("The town has chosen to kill %v", max_voted_guy))
+				s.markGuyAsDead(s.max_voted_by_town)
+				s.broadcastMessage(ctx, fmt.Sprintf("The town has chosen to kill %v", s.max_voted_by_town))
 			}
 
 			s.userVotes.PrintVotes()
+			s.max_voted_by_town = ""
 			curr_state = (curr_state + 1) % State(SLen)
 		case end:
 			// Game win scenario. If no werewolf or townperson choose to move the last state else
@@ -449,12 +462,13 @@ func (s *server) handleMessage(ctx *actor.Context) {
 			}
 		}
 
+		// Accept messages from witch during this state.
 		if curr_state == witchheal {
-			user_names := utils.GetListofUsernames(s.users)
-			fmt.Println(user_names)
 			msg := ctx.Message().(*types.Message).Msg
 
-			if !slices.Contains(user_names, msg) {
+			if msg == "pass" {
+				s.broadcastMessage(ctx, "Witch has chosen to pass.")
+			} else if s.max_voted_by_werewolf != msg {
 				ctx.Send(ctx.Sender(), utils.FormatMessageResponseFromServer(
 					"Please select the elements from the list only.."))
 			} else if healPotions > 0 {
