@@ -68,7 +68,7 @@ func main() {
 	var (
 		listenAt  = flag.String("listen", "", "specify address to listen to, will pick a random port if not specified")
 		connectTo = flag.String("connect", "127.0.0.1:4000", "the address of the server to connect to")
-		username  = flag.String("username", os.Getenv("USER"), "Enter username for client")
+		username  = flag.String("username", "", "Enter username for client")
 	)
 	flag.Parse()
 
