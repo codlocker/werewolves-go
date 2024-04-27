@@ -8,6 +8,9 @@ This repo creates the well known werewolves game using Go Programming language. 
 2. [Hollywood](https://github.com/anthdm/hollywood)
 3. [dRPC](https://github.com/storj/drpc)
 
+## Installation requirements (Windows)
+- Download [Windows](https://go.dev/dl/) installation section from the releases history.
+
 ## Installation requirements (Linux)
 
 1. Downloading Golang
@@ -23,6 +26,7 @@ This repo creates the well known werewolves game using Go Programming language. 
 ## How to run?
 - Ensure you are in the werewolf code repo (Run ```cd werewolves-go/```)
 - Run ```make build```
+  - ![Build linux](./assets/build.png)
 - The client and server builds are created in the [/bin/](./bin/) folder.
 - Clean existing builds by running ```make clean```.
 
