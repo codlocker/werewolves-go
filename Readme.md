@@ -35,7 +35,7 @@ This repo creates the well known werewolves game using Go Programming language. 
     - Execute: ```cd bin/```
     - Execute: ```./server```
 6. #### Run Clients next (Everything needs to run in werewolves-go path)
-  - To run client execude command (Open a new terminal window for each client you want to run)
+  - To run client execute command (Open a new terminal window for each client you want to run)
     - Execute: ```cd bin/```
     - Execute (**change username** to a new name in every client window): ```./client -username=<username>```
       - Examples: ```./client username=a```
