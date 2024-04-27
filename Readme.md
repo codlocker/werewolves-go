@@ -28,7 +28,7 @@ This repo creates the well known werewolves game using Go Programming language. 
 - Run ```make build```
   - ![Build linux](./assets/build.png)
 - The client and server builds are created in the [/bin/](./bin/) folder.
-- Clean existing builds by running ```make clean```.
+- Clean existing builds by running ```make clean``` (if required).
 
 - #### Run Server first (Everything needs to run in werewolves-go path)
   - To run server execute command
