@@ -47,9 +47,9 @@ var gameSet bool
 
 // Differents constants for the program
 // TODO : Move to a config file.
-var number_werewolves int = 1
+var number_werewolves int = 2
 var curr_state State = connect
-var min_players_required int = 2
+var min_players_required int = 4
 var state_start_time time.Time = time.Now()
 var connection_duration time.Duration = 60 * time.Second
 var werewolf_discussion_duration time.Duration = 60 * time.Second
@@ -299,8 +299,8 @@ func (s *server) gameChannel(ctx *actor.Context) {
 						break
 					}
 				}
-			} else if healPotions == 0 {
-				s.broadcastMessage(ctx, "Witched has used up all healing potions")
+			} else if utils.IsWitchAlive(s.users) && healPotions == 0 {
+				s.broadcastMessage(ctx, "Witch has used up all healing potions")
 			}
 
 			curr_state = (curr_state + 1) % State(SLen)
