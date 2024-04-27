@@ -16,8 +16,9 @@ This repo creates the well known werewolves game using Go Programming language. 
 - Downloading Golang
   1. Wget go files ```wget https://go.dev/dl/go1.22.2.linux-amd64.tar.gz```
   2. Run ```sudo rm -rf /usr/local/go```to remove any existing installations
-  3. Run ```export PATH=$PATH:/usr/local/go/bin```
-  4. Run ```go version``` (If the go version gets listed, your installation worked fine)
+  3. Run ```sudo tar -C /usr/local -xzf go1.22.2.linux-amd64.tar.gz``` to extract contents to local user path in Linux.
+  4. Run ```export PATH=$PATH:/usr/local/go/bin```
+  5. Run ```go version``` (If the go version gets listed, your installation worked fine)
 
 - Get Werewolves repo
   - Run ``` git clone https://github.com/codlocker/werewolves-go.git```
